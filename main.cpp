@@ -1,0 +1,254 @@
+#include "opencv2/ml/ml.hpp"
+
+#include "pcl/point_cloud.h"
+#include "pcl/point_types.h"
+#include "pcl/visualization/pcl_visualizer.h"
+#include "pcl/io/pcd_io.h"
+#include "pcl/io/ply_io.h"
+#include "pcl/keypoints/susan.h"
+#include "pcl/keypoints/iss_3d.h"
+#include "pcl/search/kdtree.h"
+#include "pcl/common/time.h"
+#include "pcl/common/distances.h"
+#include "pcl/features/normal_3d.h"
+#include "pcl/filters/filter.h"
+
+class MySVM : public CvSVM {
+public:
+    float get_rho() {
+        return decision_func->rho;
+    }
+
+    float get_alpha(int i) {
+        return decision_func->alpha[i];
+    }
+};
+
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+typedef pcl::PointCloud<pcl::Normal> NormalCloud;
+
+double computeCloudResolution(
+        PointCloud::ConstPtr cloud,
+        pcl::search::KdTree<PointCloud::PointType> const& tree)
+{
+    double res = 0.0;
+    int n_points = 0;
+    int nres;
+    std::vector<int> indices (2);
+    std::vector<float> sqr_distances (2);
+
+    for (size_t i = 0; i < cloud->size (); ++i)
+    {
+        if (! pcl_isfinite ((*cloud)[i].x))
+        {
+            continue;
+        }
+        //Considering the second neighbor since the first is the point itself.
+        nres = tree.nearestKSearch (i, 2, indices, sqr_distances);
+        if (nres == 2)
+        {
+            res += sqrt (sqr_distances[1]);
+            ++n_points;
+        }
+    }
+    if (n_points != 0)
+    {
+        res /= n_points;
+    }
+    return res;
+}
+
+cv::Mat createMatFromPointCloud(PointCloud::Ptr pc) {
+    cv::Mat result(pc->size(), 3, CV_32FC1);
+    for (int i = 0; i < pc->size(); ++i) {
+        result.at<float>(i, 0) = pc->at(i).x;
+        result.at<float>(i, 1) = pc->at(i).y;
+        result.at<float>(i, 2) = pc->at(i).z;
+    }
+    return result;
+}
+
+void generateCube(PointCloud::Ptr pc) {
+    for (float i = -1; i <= 1; i += 0.25) {
+        for (float j = -1; j <= 1; j += 0.25) {
+            for (float k = -1; k <= 1; k += 0.25) {
+                pc->push_back(PointCloud::PointType(i, j, k));
+            }
+        }
+    }
+}
+
+void generateSineGrid(PointCloud::Ptr pc) {
+    for (float i = -5; i <= 5; i += 0.1) {
+        for (float j = -5; j <= 5; j += 0.1) {
+            pc->push_back(PointCloud::PointType(i, j, sin(1 * (i + j))));
+        }
+    }
+}
+
+void printKernelValueHistogram(PointCloud::Ptr pc, float kernelWidth) {
+    int const MAX_LOG = 20;
+    float const LOG2 = log(2);
+
+    std::vector<double> logFreq(MAX_LOG);
+    for (int i = 0; i < pc->size() / 100; ++i) {
+        for (int j = i + 1; j < pc->size() / 100; ++j) {
+            float const dist = pcl::squaredEuclideanDistance(pc->at(i), pc->at(j));
+            float const kernel = exp(-dist / kernelWidth / kernelWidth);
+            float log2kernel = -log(kernel) / LOG2;
+            if (isnan(log2kernel) || log2kernel > MAX_LOG) {
+                log2kernel = MAX_LOG;
+            }
+            logFreq[static_cast<int>(log2kernel)] += 1.0;
+        }
+    }
+
+    float total = 0.0;
+    for (int i = 0; i < logFreq.size(); ++i) {
+        total += logFreq[i];
+    }
+    for (int i = 0; i < logFreq.size(); ++i) {
+        logFreq[i] /= total;
+    }
+
+    for (int i = 0; i < logFreq.size(); ++i) {
+        std::cout.precision(9);
+        std::cout << -i << "\t" << logFreq[i] << std::endl;
+    }
+}
+
+int main(int argc, char * argv []) {
+    PointCloud::Ptr pc(new PointCloud);
+    PointCloud::Ptr keypoints(new PointCloud);
+    PointCloud::Ptr support(new PointCloud);
+    NormalCloud::Ptr normals(new NormalCloud);
+
+    pcl::search::KdTree<PointCloud::PointType>::Ptr tree(
+            new pcl::search::KdTree<PointCloud::PointType>);
+
+    double resolution;
+    double kernelWidth;
+
+    pcl::visualization::PCLVisualizer viewer("Visualization");
+
+    if (argc > 1) {
+        pcl::ScopeTime st("Load cloud");
+        pcl::io::loadPCDFile(argv[1], *pc);
+        std::vector<int> tmp;
+        pcl::removeNaNFromPointCloud(*pc, *pc, tmp);
+    }
+    else {
+        // generateCube(pc);
+        generateSineGrid(pc);
+    }
+
+    {
+        pcl::ScopeTime("Save cloud");
+        pcl::io::savePCDFileASCII("cloud.pcd", *pc);
+    }
+
+    {
+        pcl::ScopeTime st("KD tree creation");
+        tree->setInputCloud(pc);
+    }
+
+    {
+        pcl::ScopeTime st("Resolution computation");
+        resolution = computeCloudResolution(pc, *tree);
+        kernelWidth = 5 * resolution;
+        std::cout << "resolution: " << resolution << std::endl;
+    }
+
+    {
+        pcl::ScopeTime st("SVM building");
+        CvSVMParams params;
+        CvTermCriteria termCriteria;
+        termCriteria.type = CV_TERMCRIT_EPS;
+        termCriteria.epsilon = 1e-4;
+        params.svm_type = CvSVM::ONE_CLASS;
+        params.nu = 0.001;
+        params.gamma = 1 / kernelWidth / kernelWidth;
+        params.term_crit = termCriteria;
+
+        cv::Mat data = createMatFromPointCloud(pc);
+        MySVM svm;
+        svm.train(data, cv::Mat(), cv::Mat(), cv::Mat(), params);
+        std::cout << svm.get_support_vector_count() << " support vectors" << std::endl;
+        for (int i = 0; i < svm.get_support_vector_count(); ++i) {
+            float const* sv = svm.get_support_vector(i);
+            support->push_back(PointCloud::PointType(sv[0], sv[1], sv[2]));
+        }
+
+        float ratio [2] = {0.0, 0.0};
+        cv::Mat query(1, 3, CV_32FC1);
+        for (int i = 0; i < data.rows; ++i) {
+            query.at<cv::Vec3f>(0) = data.at<cv::Vec3f>(i);
+            ratio[static_cast<int>(svm.predict(query, true) > svm.get_rho())] += 1.0;
+        }
+        for (int i = 0; i < 2; ++i) {
+            std::cout << "class " << i << ": " << ratio[i] / data.rows << std::endl;
+        }
+        std::cout << "rho: " << svm.get_rho() << std::endl;
+    }
+
+    /*pcl::SUSANKeypoint<PointCloud::PointType, PointCloud::PointType> susan;
+      susan.setInputCloud(pc);
+      susan.compute(*keypoints);*/
+
+    {
+        pcl::ScopeTime st("Normals computation");
+        pcl::NormalEstimation<PointCloud::PointType, pcl::Normal> ne;
+        ne.setSearchMethod(tree);
+        ne.setKSearch(30);
+        ne.setInputCloud(pc);
+        ne.compute(*normals);
+    }
+
+    {
+        pcl::ScopeTime st("Kernel value histogram");
+        printKernelValueHistogram(pc, kernelWidth);
+    }
+
+    {
+        pcl::ScopeTime st("ISS");
+        pcl::ISSKeypoint3D<PointCloud::PointType, PointCloud::PointType> iss;
+        iss.setInputCloud(pc);
+        iss.setSearchMethod(tree);
+        iss.setSalientRadius(6 * resolution);
+        iss.setNonMaxRadius(4 * resolution);
+        iss.compute(*keypoints);
+        pcl::io::savePCDFileASCII("keypoints.pcd", *keypoints);
+    }
+
+    {
+        pcl::ScopeTime("Visualization");
+
+        pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
+            cloudCH(pc, 200, 200, 200);
+        viewer.addPointCloud<PointCloud::PointType>(pc, cloudCH, "cloud");
+
+        pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
+            keypointCH(keypoints, 0, 0, 255);
+        viewer.addPointCloud<PointCloud::PointType>(keypoints, keypointCH, "keypoints");
+        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "keypoints");
+
+        pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
+            supportCH(support, 0, 255, 0);
+        viewer.addPointCloud<PointCloud::PointType>(support, supportCH, "support");
+        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "support");
+
+        pcl::visualization::PointCloudColorHandlerCustom<NormalCloud::PointType>
+            normalCH(normals, 255, 0, 0);
+        viewer.addPointCloudNormals<PointCloud::PointType, NormalCloud::PointType>
+            (pc, normals, 100, 5 * resolution, "normals");
+        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "normals");
+        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 3, "normals");
+    }
+
+    while (! viewer.wasStopped()) {
+        viewer.spinOnce();
+        pcl_sleep(0.01);
+    }
+
+    return 0;
+}
