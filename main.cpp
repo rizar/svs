@@ -117,6 +117,16 @@ void printKernelValueHistogram(PointCloud::Ptr pc, float kernelWidth) {
     }
 }
 
+PointCloud::Ptr randomSlice(PointCloud::Ptr cloud, int k) {
+    PointCloud::Ptr result(new PointCloud);
+    for (int i = 0; i < cloud->size(); ++i) {
+        if (rand() % k == 0) {
+            result->push_back(cloud->at(i));
+        }
+    }
+    return result;
+}
+
 int main(int argc, char * argv []) {
     PointCloud::Ptr pc(new PointCloud);
     PointCloud::Ptr keypoints(new PointCloud);
@@ -143,11 +153,6 @@ int main(int argc, char * argv []) {
     }
 
     {
-        pcl::ScopeTime("Save cloud");
-        pcl::io::savePCDFileASCII("cloud.pcd", *pc);
-    }
-
-    {
         pcl::ScopeTime st("KD tree creation");
         tree->setInputCloud(pc);
     }
@@ -155,24 +160,58 @@ int main(int argc, char * argv []) {
     {
         pcl::ScopeTime st("Resolution computation");
         resolution = computeCloudResolution(pc, *tree);
-        kernelWidth = 5 * resolution;
         std::cout << "resolution: " << resolution << std::endl;
     }
 
+    PointCloud::Ptr plus(new PointCloud);
+    PointCloud::Ptr minus(new PointCloud);
+    int const depth = 5;
+
+    for (int i = 0; i < pc->width; ++i) {
+        PointCloud::PointType ort = pc->at(i);
+        float norm = ort.getVector3fMap().norm();
+        ort.getVector3fMap() /= norm;
+
+        for (int j = 0; j <= depth; ++j) {
+            PointCloud::PointType point = pc->at(i);
+            point.getVector3fMap() -= ort.getVector3fMap() * resolution * j;
+            plus->push_back(point);
+        }
+        for (int j = 1; j <= depth; ++j) {
+            PointCloud::PointType point = pc->at(i);
+            point.getVector3fMap() += ort.getVector3fMap() * resolution * j;
+            minus->push_back(point);
+        }
+    }
+
     {
+        kernelWidth = 5 * resolution;
+
         pcl::ScopeTime st("SVM building");
         CvSVMParams params;
         CvTermCriteria termCriteria;
-        termCriteria.type = CV_TERMCRIT_EPS;
-        termCriteria.epsilon = 1e-4;
-        params.svm_type = CvSVM::ONE_CLASS;
-        params.nu = 0.001;
+        termCriteria.type = /*CV_TERMCRIT_ITER | */CV_TERMCRIT_EPS;
+        termCriteria.epsilon = 1e-3;
+        termCriteria.max_iter = 10000;
+        params.svm_type = CvSVM::C_SVC;
+        params.nu = 0.01;
+        params.C = 1024;
         params.gamma = 1 / kernelWidth / kernelWidth;
         params.term_crit = termCriteria;
 
-        cv::Mat data = createMatFromPointCloud(pc);
+        PointCloud::Ptr plusSlice = randomSlice(plus, 10);
+        PointCloud::Ptr minusSlice = randomSlice(minus, 10);
+
+        cv::Mat dataMat = createMatFromPointCloud(plusSlice);
+        dataMat.push_back(createMatFromPointCloud(minusSlice));
+        cv::Mat responseMat(dataMat.rows, 1, CV_32FC1);
+        for (int i = 0; i < dataMat.rows; ++i) {
+            responseMat.at<float>(i, 0) = i < plusSlice->size() ? 1 : -1;
+        }
+
         MySVM svm;
-        svm.train(data, cv::Mat(), cv::Mat(), cv::Mat(), params);
+        std::cout << dataMat.rows << " cases for SVM" << std::endl;
+        svm.train(dataMat, responseMat, cv::Mat(), cv::Mat(), params);
         std::cout << svm.get_support_vector_count() << " support vectors" << std::endl;
         for (int i = 0; i < svm.get_support_vector_count(); ++i) {
             float const* sv = svm.get_support_vector(i);
@@ -180,69 +219,40 @@ int main(int argc, char * argv []) {
         }
 
         float ratio [2] = {0.0, 0.0};
+        float total = plus->size() + minus->size();
         cv::Mat query(1, 3, CV_32FC1);
-        for (int i = 0; i < data.rows; ++i) {
-            query.at<cv::Vec3f>(0) = data.at<cv::Vec3f>(i);
-            ratio[static_cast<int>(svm.predict(query, true) > svm.get_rho())] += 1.0;
+        for (int i = 0; i < plus->size(); ++i) {
+            query.at<cv::Vec3f>(0) = cv::Vec3f(plus->at(i).x, plus->at(i).y, plus->at(i).z);
+            ratio[svm.predict(query, false) == 1.0] += 1.0;
+        }
+        for (int i = 0; i < minus->size(); ++i) {
+            query.at<cv::Vec3f>(0) = cv::Vec3f(minus->at(i).x, minus->at(i).y, minus->at(i).z);
+            ratio[svm.predict(query, false) == -1.0] += 1.0;
         }
         for (int i = 0; i < 2; ++i) {
-            std::cout << "class " << i << ": " << ratio[i] / data.rows << std::endl;
+            std::cout << "class " << i << ": " << ratio[i] / total << std::endl;
         }
-        std::cout << "rho: " << svm.get_rho() << std::endl;
-    }
-
-    /*pcl::SUSANKeypoint<PointCloud::PointType, PointCloud::PointType> susan;
-      susan.setInputCloud(pc);
-      susan.compute(*keypoints);*/
-
-    {
-        pcl::ScopeTime st("Normals computation");
-        pcl::NormalEstimation<PointCloud::PointType, pcl::Normal> ne;
-        ne.setSearchMethod(tree);
-        ne.setKSearch(30);
-        ne.setInputCloud(pc);
-        ne.compute(*normals);
-    }
-
-    {
-        pcl::ScopeTime st("Kernel value histogram");
-        printKernelValueHistogram(pc, kernelWidth);
-    }
-
-    {
-        pcl::ScopeTime st("ISS");
-        pcl::ISSKeypoint3D<PointCloud::PointType, PointCloud::PointType> iss;
-        iss.setInputCloud(pc);
-        iss.setSearchMethod(tree);
-        iss.setSalientRadius(6 * resolution);
-        iss.setNonMaxRadius(4 * resolution);
-        iss.compute(*keypoints);
-        pcl::io::savePCDFileASCII("keypoints.pcd", *keypoints);
     }
 
     {
         pcl::ScopeTime("Visualization");
 
         pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
-            cloudCH(pc, 200, 200, 200);
-        viewer.addPointCloud<PointCloud::PointType>(pc, cloudCH, "cloud");
+            plusCH(plus, 255, 0, 0);
+        viewer.addPointCloud<PointCloud::PointType>(plus, plusCH, "plus");
 
         pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
-            keypointCH(keypoints, 0, 0, 255);
-        viewer.addPointCloud<PointCloud::PointType>(keypoints, keypointCH, "keypoints");
-        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "keypoints");
+            minusCH(minus, 0, 0, 255);
+        viewer.addPointCloud<PointCloud::PointType>(minus, minusCH, "minus");
+
+        /*pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
+            cloudCH(pc, 200, 200, 200);
+        viewer.addPointCloud<PointCloud::PointType>(pc, cloudCH, "cloud");*/
 
         pcl::visualization::PointCloudColorHandlerCustom<PointCloud::PointType>
             supportCH(support, 0, 255, 0);
         viewer.addPointCloud<PointCloud::PointType>(support, supportCH, "support");
-        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "support");
-
-        pcl::visualization::PointCloudColorHandlerCustom<NormalCloud::PointType>
-            normalCH(normals, 255, 0, 0);
-        viewer.addPointCloudNormals<PointCloud::PointType, NormalCloud::PointType>
-            (pc, normals, 100, 5 * resolution, "normals");
-        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_COLOR, 1.0, 0.0, 0.0, "normals");
-        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 3, "normals");
+        viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "support");
     }
 
     while (! viewer.wasStopped()) {

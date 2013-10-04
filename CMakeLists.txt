@@ -12,5 +12,3 @@ add_definitions(${PCL_DEFINITIONS})
 add_executable(mypcl main.cpp)
 target_link_libraries(mypcl ${PCL_LIBRARIES})
 target_link_libraries(mypcl ${OpenCV_LIBS})
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
