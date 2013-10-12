@@ -4,11 +4,13 @@ project(mypcl)
 
 find_package(PCL 1.3 REQUIRED COMPONENTS)
 find_package(OpenCV REQUIRED)
+find_package(Boost 1.40 COMPONENTS program_options REQUIRED )
 
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-add_executable(mypcl main.cpp)
+add_executable(mypcl main.cpp mysvm.cpp)
 target_link_libraries(mypcl ${PCL_LIBRARIES})
 target_link_libraries(mypcl ${OpenCV_LIBS})
+target_link_libraries(mypcl ${Boost_LIBRARIES} )
