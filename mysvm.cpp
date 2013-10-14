@@ -704,7 +704,6 @@ namespace My {
             for (int i = 0; i < close.size(); ++i) {
                 Indices_.push_back(close[i]);
                 KernelValues_.push_back(AnyKernel(parent->samples[close[i]]));
-                //KernelValues_.push_back(exp(-gamma * dist[i]));
             }
         }
 
@@ -929,10 +928,6 @@ namespace My {
 
             /*if( (this->*select_working_set_func)( i, j ) != 0 || iter++ >= max_iter )
                 break;*/
-
-            if (iter <= 10) {
-                std::cerr << i << ' ' << j << std::endl;
-            }
 
             //Q_i = get_row( i, buf[0] );
             //Q_j = get_row( j, buf[1] );
