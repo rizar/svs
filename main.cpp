@@ -38,6 +38,10 @@ P createPoint(float x, float y, float z) {
     return p;
 }
 
+bool printHistogram = false;
+bool skipVisualization = false;
+bool skipCheck = false;
+
 class MySVM : public CvSVM {
 public:
     float getKernelWidth() const {
@@ -77,19 +81,11 @@ public:
 
     float fastPredict(PointType const& point, bool retDFVal = false) const {
         assert(OctTree_.get());
-        float const kernelWidth = getKernelWidth();
-        float const gamma = get_params().gamma;
-        Indices_.clear();
-        Distances_.clear();
-        OctTree_->radiusSearch(point, 5 * kernelWidth, Indices_, Distances_);
+        initNeighbors(point);
 
         float dfVal = 0.0;
         for (int i = 0; i < Indices_.size(); ++i) {
-            int const sVIndex = Indices_[i];
-            float const sVAlpha = get_alpha(sVIndex);
-            float const* sV = get_support_vector(sVIndex);
-            float const dist2 = sqr(point.x - sV[0]) + sqr(point.y - sV[1]) + sqr(point.z - sV[2]);
-            dfVal += -sVAlpha * exp(-gamma * dist2);
+            dfVal += kernelValue(Indices_[i], point);
         }
 
         if (retDFVal) {
@@ -97,6 +93,21 @@ public:
         } else {
             return dfVal > 0 ? 1 : -1;
         }
+    }
+
+private:
+    float kernelValue(int svIndex, PointType const& point) const {
+        float const* sv = get_support_vector(svIndex);
+        float const gamma = get_params().gamma;
+        float const dist2 = sqr(point.x - sv[0]) + sqr(point.y - sv[1]) + sqr(point.z - sv[2]);
+        return -get_alpha(svIndex) * exp(-gamma * dist2);
+    }
+
+    void initNeighbors(PointType const& point) const {
+        float const kernelWidth = getKernelWidth();
+        Indices_.clear();
+        Distances_.clear();
+        OctTree_->radiusSearch(point, 5 * kernelWidth, Indices_, Distances_);
     }
 
 private:
@@ -281,37 +292,39 @@ void doSVM(MySVM & svm,
 
     svm.initFastPredict();
 
-    float ratio [2] = {0.0, 0.0};
-    {
-        pcl::ScopeTime st("Accuracy");
-        float total = plus->size() + minus->size();
-        for (int i = 0; i < plus->size(); ++i) {
-            ratio[svm.fastPredict(plus->at(i), false) == 1.0] += 1.0;
-        }
-        for (int i = 0; i < minus->size(); ++i) {
-            ratio[svm.fastPredict(minus->at(i), false) == -1.0] += 1.0;
-        }
-        for (int i = 0; i < 2; ++i) {
-            ratio[i] /= total;
-        }
-    }
-
-    float learnFailed = 0.0;
-    {
-        pcl::ScopeTime st("Shape learnt");
-        for (int i = 0; i < shape->size(); ++i) {
-            if (! RangeImagePoint(shape->at(i)).isLearn(svm, resolution)) {
-                learnFailed += 1.0;
+    if (! skipCheck) {
+        float ratio [2] = {0.0, 0.0};
+        {
+            pcl::ScopeTime st("Accuracy");
+            float total = plus->size() + minus->size();
+            for (int i = 0; i < plus->size(); ++i) {
+                ratio[svm.fastPredict(plus->at(i), false) == 1.0] += 1.0;
+            }
+            for (int i = 0; i < minus->size(); ++i) {
+                ratio[svm.fastPredict(minus->at(i), false) == -1.0] += 1.0;
+            }
+            for (int i = 0; i < 2; ++i) {
+                ratio[i] /= total;
             }
         }
-        learnFailed /= shape->size();
-    }
 
-    std::cout << C << '\t' << k
-        << '\t' << dataMat.rows << '\t' << svm.get_support_vector_count() / static_cast<float>(dataMat.rows)
-        << '\t' << ratio[0] << '\t' << ratio[1] << "\t"
-        << learnFailed << "\t"
-        << trainingTime << std::endl;
+        float learnFailed = 0.0;
+        {
+            pcl::ScopeTime st("Shape learnt");
+            for (int i = 0; i < shape->size(); ++i) {
+                if (! RangeImagePoint(shape->at(i)).isLearn(svm, resolution)) {
+                    learnFailed += 1.0;
+                }
+            }
+            learnFailed /= shape->size();
+        }
+
+        std::cout << C << '\t' << k
+            << '\t' << dataMat.rows << '\t' << svm.get_support_vector_count() / static_cast<float>(dataMat.rows)
+            << '\t' << ratio[0] << '\t' << ratio[1] << "\t"
+            << learnFailed << "\t"
+            << trainingTime << std::endl;
+    }
 }
 
 int main(int argc, char * argv []) {
@@ -320,8 +333,6 @@ int main(int argc, char * argv []) {
     float eps = 1e-3;
     int depth = 5;
     int sample = 2 * depth + 2;
-    bool printHistogram = false;
-    bool skipVisualization = false;
     std::string path;
 
     po::options_description desc;
@@ -333,6 +344,7 @@ int main(int argc, char * argv []) {
         ("s", po::value<int>(&sample))
         ("hist", po::value<bool>(&printHistogram))
         ("novis", po::value<bool>(&skipVisualization)->zero_tokens())
+        ("nocheck", po::value<bool>(&skipCheck)->zero_tokens())
         ("path", po::value<std::string>(&path)->required());
 
     po::positional_options_description pos;
