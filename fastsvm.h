@@ -3,6 +3,7 @@
 
 #include "pcl/common/distances.h"
 #include "pcl/search/octree.h"
+#include "pcl/registration/bfgs.h"
 
 class DecisionFunction {
 public:
@@ -90,6 +91,59 @@ public:
     std::vector<PointType> SV_;
     std::vector<float> Alpha_;
     float Gamma_;
+};
+
+class GradientSquaredNormFunctor : public BFGSDummyFunctor<double, 3> {
+public:
+    GradientSquaredNormFunctor(DecisionFunction & df)
+        : FCalled(0)
+        , DFCalled(0)
+        , DF_(df)
+    {
+    }
+
+    virtual Scalar operator()(VectorType const& x) {
+        FCalled++;
+        PointType grad = DF_.gradient(createPoint<PointType>(x(0), x(1), x(2)));
+        return -sqr(grad.getVector3fMap().norm());
+    }
+
+    virtual void df(VectorType const& x, VectorType & res) {
+        DFCalled++;
+        PointType grad = DF_.squaredGradientNormGradient(createPoint<PointType>(x(0), x(1), x(2)));
+        grad.getVector3fMap() *= -1;
+        res = grad.getVector3fMap().cast<double>();
+    }
+
+    virtual void fdf(VectorType const& x, Scalar & fres, VectorType & dfres) {
+        fres = (*this)(x);
+        df(x, dfres);
+    }
+
+public:
+    int FCalled;
+    int DFCalled;
+
+private:
+    DecisionFunction & DF_;
+};
+
+class Printer {
+public:
+    Printer(DecisionFunction const& df)
+        : DF_(df)
+    {
+    }
+
+    void printStateAtPoint(PointType const& point, std::ostream & ostr) {
+        ostr << "STATE AT " << point << std::endl;
+        ostr << "value: " << DF_.decisionFunction(point) << std::endl;
+        ostr << "gradient norm: " << DF_.gradient(point).getVector3fMap().norm() << std::endl;
+        ostr << "squred gradient norm gradient: " << DF_.squaredGradientNormGradient(point) << std::endl;
+    }
+
+private:
+    DecisionFunction const& DF_;
 };
 
 class FastSVM : public My::CvSVM {

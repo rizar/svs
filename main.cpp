@@ -33,27 +33,25 @@ public:
 
     PointType sameStepDescent(PointType const& start, int nIters, float step) {
         DecisionFunction df;
+        Printer pr(df);
         SVM_.buildDecisionFunctionEstimate(start, &df);
 
         PointType cur(start);
         if (Verbose_) {
             std::cout.setf(std::ios_base::fixed);
             std::cout.precision(5);
-
-            std::cout << "Initially gradient norm is " << df.gradient(cur).getVector3fMap().norm() << std::endl;
-            std::cout << "And we are in " << cur << std::endl;
+            std::cout << "DESCENT STARTS\n\n";
+            pr.printStateAtPoint(cur, std::cout);
         }
         for (int iter = 0; iter < nIters; ++iter) {
             PointType gradient = df.squaredGradientNormGradient(cur);
             cur.getVector3fMap() += step * gradient.getVector3fMap() / gradient.getVector3fMap().norm();
             if (Verbose_) {
-                std::cout << "Gradient norm gradient is " << gradient << std::endl;
-                std::cout << "Gradient norm gradient norm is "
-                          << gradient.getVector3fMap().norm() << std::endl;
-                std::cout << "After iteration " << iter
-                          << " gradient norm is " << df.gradient(cur).getVector3fMap().norm() << std::endl;
-                std::cout << "And we are in " << cur << std::endl;
+                pr.printStateAtPoint(cur, std::cout);
             }
+        }
+        if (Verbose_) {
+            std::cout << "\nDESCENT ENDS\n";
         }
         return cur;
     }
@@ -207,6 +205,8 @@ void doSVM(FastSVM & svm,
            float C, float k, float eps, float resolution, int sample,
            PointCloud::Ptr shape, PointCloud::Ptr plus, PointCloud::Ptr minus)
 {
+    srand(2);
+
     float kernelWidth = k * resolution;
 
     CvSVMParams params;
@@ -387,8 +387,22 @@ int main(int argc, char * argv []) {
                 printKernelValueHistogram(shape, givenK * resolution);
             }
 
+            PointType middle = shape->at(shape->size() / 2);
+
             GradientDescent gd(svm, true);
-            gd.sameStepDescent(shape->at(shape->size() / 2), 100, 0.1 * resolution);
+            gd.sameStepDescent(middle,  100, 0.1 * resolution);
+
+            DecisionFunction df;
+            svm.buildDecisionFunctionEstimate(middle, &df);
+
+            Printer pr(df);
+            GradientSquaredNormFunctor gsnf(df);
+            GradientSquaredNormFunctor::VectorType res = middle.getVector3fMap().cast<double>();
+            BFGS<GradientSquaredNormFunctor> bfgs(gsnf);
+
+            bfgs.minimize(res);
+            std::cout << "\nBFGS\n\n";
+            pr.printStateAtPoint(createPoint<PointType>(res(0), res(1), res(2)), std::cout);
         }
     }
 
