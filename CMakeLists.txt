@@ -14,3 +14,10 @@ add_executable(mypcl main.cpp mysvm.cpp)
 target_link_libraries(mypcl ${PCL_LIBRARIES})
 target_link_libraries(mypcl ${OpenCV_LIBS})
 target_link_libraries(mypcl ${Boost_LIBRARIES} )
+
+add_executable(dbgtool dbgtool.cpp mysvm.cpp)
+target_link_libraries(dbgtool ${PCL_LIBRARIES})
+target_link_libraries(dbgtool ${OpenCV_LIBS})
+target_link_libraries(dbgtool ${Boost_LIBRARIES} )
+
+add_definitions(-std=c++11)

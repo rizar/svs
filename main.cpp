@@ -1,7 +1,4 @@
-#include "mysvm.h"
-using namespace My;
-
-//#include "opencv2/ml/ml.hpp"
+#include "fastsvm.h"
 
 #include "boost/program_options.hpp"
 
@@ -20,101 +17,50 @@ using namespace My;
 #include "pcl/filters/filter.h"
 
 namespace po = boost::program_options;
-
-typedef pcl::PointXYZRGB PointType;
-typedef pcl::PointCloud<PointType> PointCloud;
-typedef pcl::PointCloud<pcl::Normal> NormalCloud;
-
-inline float sqr(float x) {
-    return x * x;
-}
-
-template <class P>
-P createPoint(float x, float y, float z) {
-    P p;
-    p.x = x;
-    p.y = y;
-    p.z = z;
-    return p;
-}
+using My::CvSVMParams;
 
 bool printHistogram = false;
 bool skipVisualization = false;
 bool skipCheck = false;
 
-class MySVM : public CvSVM {
+class GradientDescent {
 public:
-    float getKernelWidth() const {
-        return 1 / sqrt(get_params().gamma);
+    GradientDescent(FastSVM const& svm, bool verbose = true)
+        : SVM_(svm)
+        , Verbose_(verbose)
+    {
     }
 
-    float get_rho() const {
-        return decision_func->rho;
-    }
+    PointType sameStepDescent(PointType const& start, int nIters, float step) {
+        DecisionFunction df;
+        SVM_.buildDecisionFunctionEstimate(start, &df);
 
-    float get_alpha(int i) const {
-        return decision_func->alpha[i];
-    }
+        PointType cur(start);
+        if (Verbose_) {
+            std::cout.setf(std::ios_base::fixed);
+            std::cout.precision(5);
 
-    float predict(PointType const& point, bool retDFVal = false) const {
-        cv::Mat query(1, 3, CV_32FC1);
-        query.at<cv::Vec3f>(0) = cv::Vec3f(point.x, point.y, point.z);
-        return CvSVM::predict(query, retDFVal);
-    }
-
-    PointCloud::Ptr support_vector_point_cloud() {
-        PointCloud::Ptr result(new PointCloud);
-        for (int i = 0; i < get_support_vector_count(); ++i) {
-            float const* sv = get_support_vector(i);
-            result->push_back(createPoint<PointType>(sv[0], sv[1], sv[2]));
+            std::cout << "Initially gradient norm is " << df.gradient(cur).getVector3fMap().norm() << std::endl;
+            std::cout << "And we are in " << cur << std::endl;
         }
-        return result;
-    }
-
-    void initFastPredict() {
-        float const kernelWidth = getKernelWidth();
-        OctTree_.reset(new pcl::octree::OctreePointCloudSearch<PointType>(2 * kernelWidth));
-        SVCloud_ = support_vector_point_cloud();
-        OctTree_->setInputCloud(SVCloud_);
-        OctTree_->addPointsFromInputCloud();
-    }
-
-    float fastPredict(PointType const& point, bool retDFVal = false) const {
-        assert(OctTree_.get());
-        initNeighbors(point);
-
-        float dfVal = 0.0;
-        for (int i = 0; i < Indices_.size(); ++i) {
-            dfVal += kernelValue(Indices_[i], point);
+        for (int iter = 0; iter < nIters; ++iter) {
+            PointType gradient = df.squaredGradientNormGradient(cur);
+            cur.getVector3fMap() += step * gradient.getVector3fMap() / gradient.getVector3fMap().norm();
+            if (Verbose_) {
+                std::cout << "Gradient norm gradient is " << gradient << std::endl;
+                std::cout << "Gradient norm gradient norm is "
+                          << gradient.getVector3fMap().norm() << std::endl;
+                std::cout << "After iteration " << iter
+                          << " gradient norm is " << df.gradient(cur).getVector3fMap().norm() << std::endl;
+                std::cout << "And we are in " << cur << std::endl;
+            }
         }
-
-        if (retDFVal) {
-            return dfVal;
-        } else {
-            return dfVal > 0 ? 1 : -1;
-        }
+        return cur;
     }
 
 private:
-    float kernelValue(int svIndex, PointType const& point) const {
-        float const* sv = get_support_vector(svIndex);
-        float const gamma = get_params().gamma;
-        float const dist2 = sqr(point.x - sv[0]) + sqr(point.y - sv[1]) + sqr(point.z - sv[2]);
-        return -get_alpha(svIndex) * exp(-gamma * dist2);
-    }
-
-    void initNeighbors(PointType const& point) const {
-        float const kernelWidth = getKernelWidth();
-        Indices_.clear();
-        Distances_.clear();
-        OctTree_->radiusSearch(point, 5 * kernelWidth, Indices_, Distances_);
-    }
-
-private:
-    pcl::octree::OctreePointCloudSearch<PointType>::Ptr OctTree_;
-    PointCloud::Ptr SVCloud_;
-    mutable std::vector<int> Indices_;
-    mutable std::vector<float> Distances_;
+    FastSVM const& SVM_;
+    bool Verbose_;
 };
 
 double computeCloudResolution(
@@ -238,7 +184,8 @@ public:
         return res;
     }
 
-    bool isLearn(MySVM const& svm, double resolution) {
+    bool isLearn(FastSVM const& svm, double resolution) {
+        DecisionFunction df;
         for (int j = -5; j <= -3; ++j) {
             if (svm.fastPredict(shift(resolution, j)) == -1) {
                 return false;
@@ -256,7 +203,7 @@ private:
      PointType Point_;
 };
 
-void doSVM(MySVM & svm,
+void doSVM(FastSVM & svm,
            float C, float k, float eps, float resolution, int sample,
            PointCloud::Ptr shape, PointCloud::Ptr plus, PointCloud::Ptr minus)
 {
@@ -267,7 +214,7 @@ void doSVM(MySVM & svm,
     termCriteria.type = /*CV_TERMCRIT_ITER | */CV_TERMCRIT_EPS;
     termCriteria.epsilon = eps; //1e-3;
     termCriteria.max_iter = 10000;
-    params.svm_type = MySVM::C_SVC;
+    params.svm_type = FastSVM::C_SVC;
     params.nu = 0.01;
     params.C = C;
     params.gamma = 1 / kernelWidth / kernelWidth;
@@ -292,39 +239,41 @@ void doSVM(MySVM & svm,
 
     svm.initFastPredict();
 
-    if (! skipCheck) {
-        float ratio [2] = {0.0, 0.0};
-        {
-            pcl::ScopeTime st("Accuracy");
-            float total = plus->size() + minus->size();
-            for (int i = 0; i < plus->size(); ++i) {
-                ratio[svm.fastPredict(plus->at(i), false) == 1.0] += 1.0;
-            }
-            for (int i = 0; i < minus->size(); ++i) {
-                ratio[svm.fastPredict(minus->at(i), false) == -1.0] += 1.0;
-            }
-            for (int i = 0; i < 2; ++i) {
-                ratio[i] /= total;
-            }
-        }
-
-        float learnFailed = 0.0;
-        {
-            pcl::ScopeTime st("Shape learnt");
-            for (int i = 0; i < shape->size(); ++i) {
-                if (! RangeImagePoint(shape->at(i)).isLearn(svm, resolution)) {
-                    learnFailed += 1.0;
-                }
-            }
-            learnFailed /= shape->size();
-        }
-
-        std::cout << C << '\t' << k
-            << '\t' << dataMat.rows << '\t' << svm.get_support_vector_count() / static_cast<float>(dataMat.rows)
-            << '\t' << ratio[0] << '\t' << ratio[1] << "\t"
-            << learnFailed << "\t"
-            << trainingTime << std::endl;
+    if (skipCheck) {
+        return;
     }
+
+    float ratio [2] = {0.0, 0.0};
+    {
+        pcl::ScopeTime st("Accuracy");
+        float total = plus->size() + minus->size();
+        for (int i = 0; i < plus->size(); ++i) {
+            ratio[svm.fastPredict(plus->at(i)) == 1.0] += 1.0;
+        }
+        for (int i = 0; i < minus->size(); ++i) {
+            ratio[svm.fastPredict(minus->at(i)) == -1.0] += 1.0;
+        }
+        for (int i = 0; i < 2; ++i) {
+            ratio[i] /= total;
+        }
+    }
+
+    float learnFailed = 0.0;
+    {
+        pcl::ScopeTime st("Shape learnt");
+        for (int i = 0; i < shape->size(); ++i) {
+            if (! RangeImagePoint(shape->at(i)).isLearn(svm, resolution)) {
+                learnFailed += 1.0;
+            }
+        }
+        learnFailed /= shape->size();
+    }
+
+    std::cout << C << '\t' << k
+        << '\t' << dataMat.rows << '\t' << svm.get_support_vector_count() / static_cast<float>(dataMat.rows)
+        << '\t' << ratio[0] << '\t' << ratio[1] << "\t"
+        << learnFailed << "\t"
+        << trainingTime << std::endl;
 }
 
 int main(int argc, char * argv []) {
@@ -414,14 +363,14 @@ int main(int argc, char * argv []) {
         if (givenC < 0 || givenK < 0) {
             for (float k = 2; k <= 10; k += 2) {
                 for (float C = pow(2, 0); C <= pow(2, 12); C *= 2) {
-                    MySVM svm;
+                    FastSVM svm;
                     doSVM(svm, C, k, eps, resolution, sample,
                             shape, plus, minus);
                 }
             }
             return 0;
         } else {
-            MySVM svm;
+            FastSVM svm;
             doSVM(svm, givenC, givenK, eps, resolution, sample,
                     shape, plus, minus);
 
@@ -437,6 +386,9 @@ int main(int argc, char * argv []) {
             if (printHistogram) {
                 printKernelValueHistogram(shape, givenK * resolution);
             }
+
+            GradientDescent gd(svm, true);
+            gd.sameStepDescent(shape->at(shape->size() / 2), 100, 0.1 * resolution);
         }
     }
 
