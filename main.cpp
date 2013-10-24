@@ -1,4 +1,5 @@
 #include "fastsvm.h"
+#include "analysis.h"
 
 #include "boost/program_options.hpp"
 
@@ -61,38 +62,6 @@ private:
     bool Verbose_;
 };
 
-double computeCloudResolution(
-        PointCloud::ConstPtr cloud,
-        pcl::search::KdTree<PointType> const& tree)
-{
-    double res = 0.0;
-    int n_points = 0;
-    int nres;
-    std::vector<int> indices (2);
-    std::vector<float> sqr_distances (2);
-
-    for (size_t i = 0; i < cloud->size (); ++i)
-    {
-        if (! pcl_isfinite ((*cloud)[i].x))
-        {
-            continue;
-        }
-        //Considering the second neighbor since the first is the point itself.
-        nres = tree.nearestKSearch (i, 2, indices, sqr_distances);
-        if (nres == 2)
-        {
-            res += sqrt (sqr_distances[1]);
-            ++n_points;
-        }
-    }
-    if (n_points != 0)
-    {
-        res /= n_points;
-    }
-    return res;
-}
-
-
 void generateCube(PointCloud::Ptr shape) {
     for (float i = -1; i <= 1; i += 0.25) {
         for (float j = -1; j <= 1; j += 0.25) {
@@ -111,37 +80,14 @@ void generateSineGrid(PointCloud::Ptr shape) {
     }
 }
 
-void printKernelValueHistogram(PointCloud::Ptr shape, float kernelWidth) {
-    int const MAX_LOG = 20;
-    float const LOG2 = log(2);
-
-    std::vector<double> logFreq(MAX_LOG + 1);
-    std::vector<double> cumFreq(MAX_LOG + 1);
+cv::Mat createMatFromPointCloud(PointCloud::Ptr shape) {
+    cv::Mat result(shape->size(), 3, CV_32FC1);
     for (int i = 0; i < shape->size(); ++i) {
-        for (int j = i + 1; j < shape->size(); ++j) {
-            float const dist = pcl::squaredEuclideanDistance(shape->at(i), shape->at(j));
-            float const kernel = exp(-dist / kernelWidth / kernelWidth);
-            float log2kernel = -log(kernel) / LOG2;
-            if (isnan(log2kernel) || log2kernel > MAX_LOG) {
-                log2kernel = MAX_LOG;
-            }
-            logFreq[static_cast<int>(log2kernel)] += 1.0;
-        }
+        result.at<float>(i, 0) = shape->at(i).x;
+        result.at<float>(i, 1) = shape->at(i).y;
+        result.at<float>(i, 2) = shape->at(i).z;
     }
-
-    float total = shape->size() * (shape->size() - 1) / 2;
-    for (int i = 0; i < logFreq.size(); ++i) {
-        logFreq[i] /= total;
-    }
-    logFreq[0] = logFreq[0];
-    for (int i = 0; i < cumFreq.size(); ++i) {
-        cumFreq[i] = cumFreq[i - 1] + logFreq[i];
-    }
-
-    for (int i = 0; i < logFreq.size(); ++i) {
-        std::cout.precision(5);
-        std::cout << -i << "\t" << logFreq[i] << "\t" << cumFreq[i] << std::endl;
-    }
+    return result;
 }
 
 PointCloud::Ptr randomSlice(PointCloud::Ptr cloud, int k) {
