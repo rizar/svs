@@ -92,15 +92,6 @@ double computeCloudResolution(
     return res;
 }
 
-cv::Mat createMatFromPointCloud(PointCloud::Ptr shape) {
-    cv::Mat result(shape->size(), 3, CV_32FC1);
-    for (int i = 0; i < shape->size(); ++i) {
-        result.at<float>(i, 0) = shape->at(i).x;
-        result.at<float>(i, 1) = shape->at(i).y;
-        result.at<float>(i, 2) = shape->at(i).z;
-    }
-    return result;
-}
 
 void generateCube(PointCloud::Ptr shape) {
     for (float i = -1; i <= 1; i += 0.25) {
