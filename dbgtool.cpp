@@ -1,5 +1,6 @@
 #include "fastsvm.h"
 #include "trainset.h"
+#include "searcher.h"
 
 #include <iostream>
 

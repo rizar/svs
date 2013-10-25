@@ -1,4 +1,4 @@
-/*M///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
 //
 //  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
 //
@@ -85,6 +85,7 @@
 
 #include "pcl/search/octree.h"
 #include "pcl/point_cloud.h"
+#include "pcl/common/time.h"
 
 using namespace cv;
 
@@ -102,6 +103,8 @@ typedef double Qfloat;
 #endif
 
 namespace My {
+    float kernelThreshold = 0;
+
     CvStatModel::CvStatModel()
     {
         default_model_name = "my_stat_model";
@@ -701,9 +704,11 @@ namespace My {
             std::vector<float> dist;
             octree.radiusSearch(point, Radius_, close, dist);
 
+            Indices_.reserve(close.size());
+            KernelValues_.reserve(close.size());
             for (int i = 0; i < close.size(); ++i) {
                 Indices_.push_back(close[i]);
-                KernelValues_.push_back(AnyKernel(parent->samples[close[i]]));
+                KernelValues_.push_back(exp(-gamma * dist[i]));
             }
         }
 
@@ -842,30 +847,35 @@ namespace My {
 
     bool CvSVMSolver::solve_generic( CvSVMSolutionInfo& si )
     {
-        float const threshold = 1e-5;
-        float const sigma = 1 / sqrt(kernel->params->gamma);
-        float const radius = sigma * sqrt(-log(threshold));
-
-        PointCloud::Ptr pc(new PointCloud);
-        for (int i = 0; i < alpha_count; ++i) {
-            pc->push_back(PointType(samples[i][0], samples[i][1], samples[i][2]));
-        }
-        OctTree octree(2 * sigma);
-        octree.setInputCloud(pc);
-        octree.addPointsFromInputCloud();
-
         std::vector<Neighbourhood> nbs(alpha_count);
-        for (int i = 0; i < alpha_count; ++i) {
-            nbs[i].Init(this, samples[i], radius, octree);
-        }
+        {
+            pcl::ScopeTime st("Neighbour search");
 
-        std::cerr << "Kernel computed\n";
-        float total = 0.0;
-        for (int i = 0; i < alpha_count; ++i) {
-            total += nbs[i].NeighbourCount();
+            assert(kernelThreshold > 0);
+            float const sigma = 1 / sqrt(kernel->params->gamma);
+            float const radius = sigma * sqrt(-log(kernelThreshold));
+
+            PointCloud::Ptr pc(new PointCloud);
+            for (int i = 0; i < alpha_count; ++i) {
+                pc->push_back(PointType(samples[i][0], samples[i][1], samples[i][2]));
+            }
+            OctTree octree(2 * sigma);
+            octree.setInputCloud(pc);
+            octree.addPointsFromInputCloud();
+
+#ifdef NDEBUG
+            #pragma omp parallel for
+#endif
+            for (int i = 0; i < alpha_count; ++i) {
+                nbs[i].Init(this, samples[i], radius, octree);
+            }
+
+            float total = 0.0;
+            for (int i = 0; i < alpha_count; ++i) {
+                total += nbs[i].NeighbourCount();
+            }
+            std::cerr << "Average number of neighbours is " << total / alpha_count << std::endl;
         }
-        std::cerr << alpha_count << " samples" << std::endl;
-        std::cerr << "Average number of neighbours is " << total / alpha_count << std::endl;
 
         // WORKS WELL ONLY FOR C-SVC !!!
 

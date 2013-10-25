@@ -1,8 +1,11 @@
+#pragma once
+
 #include "common.h"
 
 #include "pcl/search/kdtree.h"
+#include "pcl/common/distances.h"
 
-double computeCloudResolution(
+inline double computeCloudResolution(
         PointCloud::ConstPtr cloud,
         pcl::search::KdTree<PointType> const& tree)
 {
@@ -33,7 +36,7 @@ double computeCloudResolution(
     return res;
 }
 
-void printKernelValueHistogram(PointCloud::Ptr shape, float kernelWidth) {
+inline void printKernelValueHistogram(PointCloud::Ptr shape, float kernelWidth) {
     int const MAX_LOG = 20;
     float const LOG2 = log(2);
 

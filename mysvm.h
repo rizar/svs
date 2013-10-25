@@ -1,4 +1,4 @@
-/*M///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
 //
 //  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
 //
@@ -38,6 +38,8 @@
 //
 //M*/
 
+#pragma once
+
 #ifndef __OPENCV_ML_HPP__
 #define __OPENCV_ML_HPP__
 
@@ -67,6 +69,8 @@
 #define CV_TYPE_NAME_ML_SVM         "opencv-ml-svm"
 
 namespace My {
+
+    extern float kernelThreshold;
 
     class CV_EXPORTS_W CvStatModel
     {

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "common.h"
 #include "mysvm.h"
 
@@ -128,24 +130,6 @@ private:
     DecisionFunction & DF_;
 };
 
-class Printer {
-public:
-    Printer(DecisionFunction const& df)
-        : DF_(df)
-    {
-    }
-
-    void printStateAtPoint(PointType const& point, std::ostream & ostr) {
-        ostr << "STATE AT " << point << std::endl;
-        ostr << "value: " << DF_.decisionFunction(point) << std::endl;
-        ostr << "gradient norm: " << DF_.gradient(point).getVector3fMap().norm() << std::endl;
-        ostr << "squred gradient norm gradient: " << DF_.squaredGradientNormGradient(point) << std::endl;
-    }
-
-private:
-    DecisionFunction const& DF_;
-};
-
 class FastSVM : public My::CvSVM {
 public:
     float getKernelWidth() const {
@@ -158,6 +142,11 @@ public:
 
     float get_alpha(int i) const {
         return decision_func->alpha[i];
+    }
+
+    void train(cv::Mat objects, cv::Mat responses, My::CvSVMParams const& params) {
+        My::CvSVM::train(objects, responses, cv::Mat(), cv::Mat(), params);
+        initFastPredict();
     }
 
     float predict(PointType const& point, bool retDFVal = false) const {
@@ -173,14 +162,6 @@ public:
             result->push_back(createPoint<PointType>(sv[0], sv[1], sv[2]));
         }
         return result;
-    }
-
-    void initFastPredict() {
-        float const kernelWidth = getKernelWidth();
-        SVTree.reset(new pcl::octree::OctreePointCloudSearch<PointType>(2 * kernelWidth));
-        SVCloud_ = support_vector_point_cloud();
-        SVTree->setInputCloud(SVCloud_);
-        SVTree->addPointsFromInputCloud();
     }
 
     float fastPredict(PointType const& point) const {
@@ -207,6 +188,14 @@ private:
         return createPoint<PointType>(sv[0], sv[1], sv[2]);
     }
 
+    void initFastPredict() {
+        float const kernelWidth = getKernelWidth();
+        SVTree.reset(new pcl::octree::OctreePointCloudSearch<PointType>(2 * kernelWidth));
+        SVCloud_ = support_vector_point_cloud();
+        SVTree->setInputCloud(SVCloud_);
+        SVTree->addPointsFromInputCloud();
+    }
+
 private:
     pcl::octree::OctreePointCloudSearch<PointType>::Ptr SVTree;
     PointCloud::Ptr SVCloud_;
@@ -214,4 +203,28 @@ private:
     mutable std::vector<float> Distances_;
 };
 
+class Printer {
+public:
+    Printer(DecisionFunction const& df)
+        : DF_(df)
+    {
+    }
+
+    void printStateAtPoint(PointType const& point, std::ostream & ostr) {
+        ostr << "STATE AT " << point << std::endl;
+        ostr << "value: " << DF_.decisionFunction(point) << std::endl;
+        ostr << "gradient norm: " << DF_.gradient(point).getVector3fMap().norm() << std::endl;
+        ostr << "squred gradient norm gradient: " << DF_.squaredGradientNormGradient(point) << std::endl;
+    }
+
+    static void printStateAtPoint(FastSVM const& model, PointType const& point, std::ostream & ostr) {
+        DecisionFunction df;
+        model.buildDecisionFunctionEstimate(point, &df);
+        Printer pr(df);
+        pr.printStateAtPoint(point, ostr);
+    }
+
+private:
+    DecisionFunction const& DF_;
+};
 

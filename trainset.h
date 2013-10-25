@@ -1,3 +1,5 @@
+#pragma once
+
 #include "opencv2/core/core.hpp"
 
 #include "rangeimagepoint.h"
@@ -30,6 +32,8 @@ public:
                 }
             }
         }
+        std::cerr << classes[0].size() << " points inside" << std::endl;
+        std::cerr << classes[1].size() << " points outside" << std::endl;
 
         int const total = classes[0].size() + classes[1].size();
         objects->create(total, 3, CV_32FC1);
