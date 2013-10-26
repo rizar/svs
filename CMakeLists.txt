@@ -20,12 +20,6 @@ add_definitions(${PCL_DEFINITIONS})
 add_definitions(-std=c++11)
 add_definitions(-fopenmp)
 
-add_executable(view main.cpp mysvm.cpp)
-target_link_libraries(view ${PCL_LIBRARIES})
-target_link_libraries(view ${OpenCV_LIBS})
-target_link_libraries(view ${Boost_LIBRARIES} )
-cotire(view)
-
 add_executable(dbgtool dbgtool.cpp mysvm.cpp)
 target_link_libraries(dbgtool ${PCL_LIBRARIES})
 target_link_libraries(dbgtool ${OpenCV_LIBS})

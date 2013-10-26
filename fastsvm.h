@@ -186,12 +186,6 @@ public:
         return result;
     }
 
-    float fastPredict(PointType const& point) const {
-        DecisionFunction df;
-        buildDecisionFunctionEstimate(point, &df);
-        return df.decisionFunction(point) > 0 ? 1 : -1;
-    }
-
     void buildDecisionFunctionEstimate(PointType const& point, DecisionFunction * df) const {
         float const kernelWidth = getKernelWidth();
         Indices_.clear();

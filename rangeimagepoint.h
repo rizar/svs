@@ -21,20 +21,6 @@ public:
         return res;
     }
 
-    bool isLearn(FastSVM const& svm, double resolution) {
-        for (int j = -5; j <= -3; ++j) {
-            if (svm.fastPredict(shift(resolution, j)) == -1) {
-                return false;
-            }
-        }
-        for (int j = 4; j <= 5; ++j) {
-            if (svm.fastPredict(shift(resolution, j)) == 1) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 private:
      PointType Point_;
 };
