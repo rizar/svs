@@ -32,7 +32,7 @@ target_link_libraries(dbgtool ${OpenCV_LIBS})
 target_link_libraries(dbgtool ${Boost_LIBRARIES} )
 cotire(dbgtool)
 
-add_executable(fpoints featurepoints.cpp searcher.cpp mysvm.cpp)
+add_executable(fpoints featurepoints.cpp searcher.cpp mysvm.cpp check.cpp svs.cpp)
 target_link_libraries(fpoints ${PCL_LIBRARIES})
 target_link_libraries(fpoints ${OpenCV_LIBS})
 target_link_libraries(fpoints ${Boost_LIBRARIES} )

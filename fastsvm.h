@@ -1,11 +1,22 @@
 #pragma once
 
 #include "common.h"
-#include "mysvm.h"
 
 #include "pcl/common/distances.h"
 #include "pcl/search/octree.h"
 #include "pcl/registration/bfgs.h"
+
+#define USE_MY_SVM
+
+#ifdef USE_MY_SVM
+#include "mysvm.h"
+typedef My::CvSVMParams BaseSVMParams;
+typedef My::CvSVM BaseSVM;
+#else
+#include "opencv2/ml/ml.hpp"
+typedef CvSVMParams BaseSVMParams;
+typedef CvSVM BaseSVM;
+#endif
 
 class DecisionFunction {
 public:
@@ -130,7 +141,7 @@ private:
     DecisionFunction & DF_;
 };
 
-class FastSVM : public My::CvSVM {
+class FastSVM : public BaseSVM {
 public:
     float getKernelWidth() const {
         return 1 / sqrt(get_params().gamma);
@@ -144,9 +155,20 @@ public:
         return decision_func->alpha[i];
     }
 
-    void train(cv::Mat objects, cv::Mat responses, My::CvSVMParams const& params) {
-        My::CvSVM::train(objects, responses, cv::Mat(), cv::Mat(), params);
+    void train(cv::Mat objects, cv::Mat responses, BaseSVMParams const& params) {
+        BaseSVM::train(objects, responses, cv::Mat(), cv::Mat(), params);
         initFastPredict();
+
+        int nSV = get_support_vector_count();
+        std::cerr << nSV << " support vectors" << std::endl;
+
+        int maxAlphas = 0;
+        for (int i = 0; i < nSV; ++i) {
+            if (get_alpha(i) > params.C - 1e-3) {
+                maxAlphas++;
+            }
+        }
+        std::cerr << maxAlphas << " support vectors classified wrongly" << std::endl;
     }
 
     float predict(PointType const& point, bool retDFVal = false) const {
@@ -174,7 +196,8 @@ public:
         float const kernelWidth = getKernelWidth();
         Indices_.clear();
         Distances_.clear();
-        SVTree->radiusSearch(point, 5 * kernelWidth, Indices_, Distances_);
+        // hardcoded constant is todo
+        SVTree->radiusSearch(point, 4 * kernelWidth, Indices_, Distances_);
 
         df->reset(get_params().gamma);
         for (int i = 0; i < Indices_.size(); ++i) {
