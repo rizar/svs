@@ -3,5 +3,5 @@ set path=.,/usr/include,,/usr/local/include,/usr/local/include/opencv2,/usr/incl
 
 map <leader>bd :set makeprg=cd\ ../debug;\ make\ -j4\ VERBOSE=1<CR>:make<CR>
 map <leader>br :set makeprg=cd\ ../release;\ make\ -j4\ VERBOSE=1<CR>:make<CR>
-map <leader>td :set makeprg=cd\ ../debug;\ make\ -j4\ VERBOSE=1\ fpoints<CR>:make<CR>
-map <leader>tr :set makeprg=cd\ ../release;\ make\ -j4\ VERBOSE=1\ fpoints<CR>:make<CR>
+map <leader>td :set makeprg=cd\ ../debug;\ make\ -j4\ VERBOSE=1\ evaltool<CR>:make<CR>
+map <leader>tr :set makeprg=cd\ ../release;\ make\ -j4\ VERBOSE=1\ evaltool<CR>:make<CR>

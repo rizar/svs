@@ -2,14 +2,27 @@
 
 class SupportVectorShape {
 public:
-    SupportVectorShape(PointCloud::Ptr featurePoints)
-        : FeaturePoints(featurePoints)
+    SupportVectorShape()
+        : FeaturePoints_(new PointCloud)
     {
+    }
+
+    SupportVectorShape(PointCloud::Ptr featurePoints)
+        : FeaturePoints_(featurePoints)
+    {
+    }
+
+    PointCloud::Ptr FeaturePoints() {
+        return FeaturePoints_;
+    }
+
+    PointCloud::ConstPtr FeaturePoints() const {
+        return FeaturePoints_;
     }
 
     void LoadAsText(std::istream & istr);
     void SaveAsText(std::ostream & ostr);
 
 private:
-    PointCloud::Ptr FeaturePoints;
+    PointCloud::Ptr FeaturePoints_;
 };

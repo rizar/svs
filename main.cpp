@@ -1,3 +1,4 @@
+#include "baseapp.h"
 #include "analysis.h"
 #include "fastsvm.h"
 #include "trainset.h"
@@ -6,10 +7,8 @@
 #include "check.h"
 #include "svs.h"
 
-#include "pcl/io/pcd_io.h"
 #include "pcl/common/time.h"
 #include "pcl/common/distances.h"
-#include "pcl/filters/filter.h"
 
 #include "boost/program_options.hpp"
 
@@ -17,10 +16,7 @@
 
 namespace po = boost::program_options;
 
-class App {
-private:
-    typedef pcl::octree::OctreePointCloudSearch<PointType> OctTreeType;
-
+class App : public BaseApp {
 public:
     App(int argc, char* argv [])
         : Seed_(1)
@@ -42,7 +38,6 @@ public:
     int Run();
 
 private:
-    void Load();
     void Learn();
     void Search();
 
@@ -59,8 +54,6 @@ private:
 
     void CalcGradientNormsAndCheck();
     void CalcRelativeLocalGradientNorms();
-    void BuildOctTree();
-    void CalcDistanceToNN();
 
 private:
     int Seed_;
@@ -84,15 +77,8 @@ private:
 
     std::string CameraDescription_;
 
-    std::string InputPath_;
     std::string OutputPath_;
 
-    float Resolution_;
-
-    PointCloud::Ptr Input_;
-    PointCloud::Ptr InputNoNan_;
-    pcl::search::KdTree<PointType>::Ptr InputKDTree_;
-    OctTreeType::Ptr InputOctTree_;
 
     FastSVM SVM_;
     FeaturePointSearcher Searcher_;
@@ -102,8 +88,6 @@ private:
     float MaxGradientNorm_;
     std::vector<float> GradientNorms_;
     std::vector<float> RelLocGradNorms_;
-
-    std::vector<float> DistToNN_;
 };
 
 void App::ParseArgs(int argc, char* argv []) {
@@ -179,18 +163,6 @@ int App::Run() {
 
     PrintStatistics();
     return 0;
-}
-
-void App::Load() {
-    Input_.reset(new PointCloud);
-    InputNoNan_.reset(new PointCloud);
-    pcl::io::loadPCDFile(InputPath_, *Input_);
-    std::vector<int> tmp;
-    pcl::removeNaNFromPointCloud(*Input_, *InputNoNan_, tmp);
-
-    InputKDTree_.reset(new pcl::search::KdTree<PointType>);
-    InputKDTree_->setInputCloud(InputNoNan_);
-    Resolution_ = computeCloudResolution(InputNoNan_, *InputKDTree_);
 }
 
 void App::Learn() {
@@ -338,7 +310,6 @@ void App::CalcRelativeLocalGradientNorms() {
     RelLocGradNorms_.resize(InputNoNan_->size());
 
     CalcGradientNormsAndCheck();
-    BuildOctTree();
 
     std::vector<int> indices;
     std::vector<float> dist2;
@@ -357,31 +328,6 @@ void App::CalcRelativeLocalGradientNorms() {
 
         RelLocGradNorms_[i] = less / static_cast<float>(less + more);
     }
-}
-
-void App::CalcDistanceToNN() {
-    if (DistToNN_.size()) {
-        return;
-    }
-    pcl::ScopeTime st("CalcDistanceToNN");
-
-    std::vector<int> indices;
-    std::vector<float> dist2;
-    DistToNN_.resize(InputNoNan_->size());
-    for (int i = 0; i < InputNoNan_->size(); ++i) {
-        PointType const& point = InputNoNan_->at(i);
-        InputKDTree_->nearestKSearch(i, 2, indices, dist2);
-        DistToNN_[i] = sqrt(dist2[1]);
-    }
-}
-
-void App::BuildOctTree() {
-    if (InputOctTree_.get()) {
-        return;
-    }
-    InputOctTree_.reset(new OctTreeType(10 * Resolution_));
-    InputOctTree_->setInputCloud(InputNoNan_);
-    InputOctTree_->addPointsFromInputCloud();
 }
 
 int main(int argc, char* argv []) {
