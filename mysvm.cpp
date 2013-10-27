@@ -880,7 +880,7 @@ namespace My {
         // WORKS WELL ONLY FOR C-SVC !!!
 
         int iter = 0;
-        int i, j, k;
+        int i, j;
 
         // 1. initialize gradient and alpha status
         for( i = 0; i < alpha_count; i++ )
@@ -912,8 +912,6 @@ namespace My {
         // 2. optimization loop
         for(;;)
         {
-            const Qfloat *Q_i, *Q_j;
-
             double C_i, C_j;
             double old_alpha_i, old_alpha_j, alpha_i, alpha_j;
             double delta_alpha_i, delta_alpha_j;

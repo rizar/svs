@@ -3,6 +3,8 @@
 #include "common.h"
 #include "fastsvm.h"
 
+#include <functional>
+
 class FeaturePointSearcher {
 public:
     FeaturePointSearcher();
@@ -11,10 +13,21 @@ public:
     PointType SearchFromSeed(FastSVM const& model, PointType const& seed);
 
     void ChooseSeeds(PointCloud const& cloud, std::vector<float> const& gradientNorms);
+    void OneStageSearch(
+            FastSVM const& model,
+            PointCloud const& cloud,
+            std::vector<float> const& gradientNorms);
+
+private:
+    bool HasClosePoint(PointCloud const& cloud, PointType const& point, float threshold);
+
+    void IterateProspectiveSeeds(PointCloud const& cloud, std::vector<float> const& gradientNorms,
+            std::function<bool (PointType const& point)>);
 
 public:
     int NumSeeds;
-    float MinSpace;
+    float MinSpaceSeeds;
+    float MinSpaceFP;
 
     PointCloud::Ptr Seeds;
     PointCloud::Ptr FeaturePoints;

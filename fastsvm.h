@@ -27,9 +27,9 @@ public:
     DecisionFunction(float gamma,
             std::vector<PointType> const& sv,
             std::vector<float> const& alpha)
-        : Gamma_(gamma)
-        , SV_(sv)
+        : SV_(sv)
         , Alpha_(alpha)
+        , Gamma_(gamma)
     {
         assert(SV_.size() == Alpha_.size());
     }

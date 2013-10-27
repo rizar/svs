@@ -32,7 +32,6 @@ void BaseApp::CalcDistanceToNN() {
     std::vector<float> dist2;
     DistToNN_.resize(InputNoNan_->size());
     for (int i = 0; i < InputNoNan_->size(); ++i) {
-        PointType const& point = InputNoNan_->at(i);
         InputKDTree_->nearestKSearch(i, 2, indices, dist2);
         DistToNN_[i] = sqrt(dist2[1]);
     }

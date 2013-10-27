@@ -32,6 +32,35 @@ PointType FeaturePointSearcher::SearchFromSeed(FastSVM const& model, PointType c
 }
 
 void FeaturePointSearcher::ChooseSeeds(PointCloud const& cloud, std::vector<float> const& gradientNorms) {
+    IterateProspectiveSeeds(cloud, gradientNorms, [this] (PointType const& point) {
+                Seeds->push_back(point);
+                return Seeds->size() < NumSeeds;
+            });
+}
+
+void FeaturePointSearcher::OneStageSearch(
+        FastSVM const& model,
+        PointCloud const& cloud,
+        std::vector<float> const& gradientNorms)
+{
+    IterateProspectiveSeeds(cloud, gradientNorms, [this, &model] (PointType const& point) {
+                PointType fp = SearchFromSeed(model, point);
+                if (HasClosePoint(*FeaturePoints, fp, MinSpaceFP)) {
+                    return true;
+                }
+                Seeds->push_back(point);
+                FeaturePoints->push_back(fp);
+                return Seeds->size() < NumSeeds;
+            });
+}
+
+void FeaturePointSearcher::IterateProspectiveSeeds(
+        PointCloud const& cloud,
+        std::vector<float> const& gradientNorms,
+        std::function<bool (PointType const& point)> handler)
+{
+    Seeds->clear();
+
     std::vector< std::pair<float, int> > pairs(cloud.size());
     for (int i = 0; i < pairs.size(); ++i) {
         pairs[i].first = gradientNorms[i];
@@ -39,19 +68,23 @@ void FeaturePointSearcher::ChooseSeeds(PointCloud const& cloud, std::vector<floa
     }
     std::sort(pairs.begin(), pairs.end(), std::greater< std::pair<float, int> >());
 
-    Seeds->clear();
-    for (int i = 0; Seeds->size() < NumSeeds && i < pairs.size(); ++i) {
+    for (int i = 0; i < pairs.size(); ++i) {
         int const idx = pairs[i].second;
 
-        bool alreadyClose = false;
-        for (int j = 0; j < Seeds->size(); ++j) {
-            if (sqrt(squaredEuclideanDistance(cloud[idx], Seeds->at(j))) < MinSpace) {
-                alreadyClose = true;
-            }
+        if (HasClosePoint(*Seeds, cloud[idx], MinSpaceSeeds)) {
+            continue;
         }
-
-        if (! alreadyClose) {
-            Seeds->push_back(cloud[idx]);
+        if (! handler(cloud[idx])) {
+            break;
         }
     }
+}
+
+bool FeaturePointSearcher::HasClosePoint(PointCloud const& cloud, PointType const& point, float threshold) {
+    for (int i = 0; i < cloud.size(); ++i) {
+        if (sqrt(squaredEuclideanDistance(cloud[i], point)) < threshold) {
+            return true;
+        }
+    }
+    return false;
 }

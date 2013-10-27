@@ -184,11 +184,14 @@ void App::Search() {
     CalcGradientNormsAndCheck();
     CalcRelativeLocalGradientNorms();
 
+    pcl::ScopeTime st("Search");
     Searcher_.NumSeeds = NumFP_;
-    Searcher_.MinSpace = 10 * Resolution_;
+    Searcher_.MinSpaceSeeds = 10 * Resolution_;
+    Searcher_.MinSpaceFP = 5 * Resolution_;
+    Searcher_.OneStageSearch(SVM_, *InputNoNan_, RelLocGradNorms_);
     // Searcher_.ChooseSeeds(*InputNoNan_, GradientNorms_);
-    Searcher_.ChooseSeeds(*InputNoNan_,RelLocGradNorms_);
-    Searcher_.Search(SVM_);
+    // Searcher_.ChooseSeeds(*InputNoNan_, RelLocGradNorms_);
+    // Searcher_.Search(SVM_);
 }
 
 void App::SetSVMParams(BaseSVMParams * params) {
@@ -310,11 +313,12 @@ void App::CalcRelativeLocalGradientNorms() {
     RelLocGradNorms_.resize(InputNoNan_->size());
 
     CalcGradientNormsAndCheck();
+    CalcDistanceToNN();
 
     std::vector<int> indices;
     std::vector<float> dist2;
     for (int i = 0; i < InputNoNan_->size(); ++i) {
-        InputOctTree_->radiusSearch(InputNoNan_->at(i), 15 * Resolution_, indices, dist2);
+        InputOctTree_->radiusSearch(InputNoNan_->at(i), 15 * DistToNN_[i], indices, dist2);
 
         int less = 0, more = 0;
         for (int j = 0; j < indices.size(); ++j) {

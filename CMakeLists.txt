@@ -19,6 +19,7 @@ link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 add_definitions(-std=c++11)
 add_definitions(-fopenmp)
+add_definitions(-Wall)
 
 add_executable(svs main.cpp searcher.cpp mysvm.cpp check.cpp svs.cpp baseapp.cpp)
 target_link_libraries(svs ${PCL_LIBRARIES})
