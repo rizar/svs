@@ -1,7 +1,9 @@
-#include "baseapp.h"
-#include "svs.h"
+#include "components/baseapp.h"
+#include "components/svs.h"
 
 #include "boost/program_options.hpp"
+
+#include "pcl/common/distances.h"
 
 #include <iostream>
 #include <fstream>

@@ -1,13 +1,14 @@
-#include "fastsvm.h"
-#include "trainset.h"
-#include "searcher.h"
+#include "components/fastsvm.h"
+#include "components/trainset.h"
+#include "components/searcher.h"
 
 #include <iostream>
 
 void testDecisionFunction() {
     DecisionFunction df(0.5,
                         std::vector<PointType>({createPoint<PointType>(0.0, 0.0, 0.0)}),
-                        std::vector<float>({1}));
+                        std::vector<float>({1}),
+                        0);
     PointType point = createPoint<PointType>(0.5, 0.5, 0.0);
     Eigen::MatrixXf hessian;
 
@@ -25,12 +26,12 @@ void testTrainSetGenerator() {
     cloud.push_back(createPoint<PointType>(-1, 1, 1));
     cloud.push_back(createPoint<PointType>(-1, -1, 1));
 
-    TrainingSetGenerator tst(sqrt(3), 3, 0.5);
-    cv::Mat objects;
-    cv::Mat responses;
-    tst.generate(cloud, &objects, &responses);
-    std::cout << "OBJECTS\n" << objects << std::endl;
-    std::cout << "RESPONSES\n" << responses << std::endl;
+    //TrainingSetGenerator tst(sqrt(3), 3, 0.5);
+    //cv::Mat objects;
+    //cv::Mat responses;
+    //tst.generate(cloud, &objects, &responses);
+    //std::cout << "OBJECTS\n" << objects << std::endl;
+    //std::cout << "RESPONSES\n" << responses << std::endl;
 }
 
 int main() {

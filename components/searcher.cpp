@@ -19,7 +19,7 @@ void FeaturePointSearcher::Search(FastSVM const& model) {
     }
 }
 
-PointType FeaturePointSearcher::SearchFromSeed(FastSVM const& model, PointType const& seed) {
+PointType FeaturePointSearcher::SearchFromSeed(FastSVM const& model, PointType const& seed, float * gn2gn) {
     DecisionFunction df;
     model.buildDecisionFunctionEstimate(seed, &df);
 
@@ -27,6 +27,10 @@ PointType FeaturePointSearcher::SearchFromSeed(FastSVM const& model, PointType c
     GradientSquaredNormFunctor::VectorType current(seed.getVector3fMap().cast<double>());
     BFGS<GradientSquaredNormFunctor> bfgs(gsnf);
     bfgs.minimize(current);
+    if (gn2gn) {
+        *gn2gn = df.squaredGradientNormGradient(
+                pointFromVector<PointType>(current)).getVector3fMap().norm();
+    }
 
     return pointFromVector<PointType>(current);
 }
@@ -44,7 +48,11 @@ void FeaturePointSearcher::OneStageSearch(
         std::vector<float> const& gradientNorms)
 {
     IterateProspectiveSeeds(cloud, gradientNorms, [this, &model] (PointType const& point) {
-                PointType fp = SearchFromSeed(model, point);
+                float gn2gn;
+                PointType fp = SearchFromSeed(model, point, &gn2gn);
+                if (gn2gn > 1e-2) {
+                    return true;
+                }
                 if (HasClosePoint(*FeaturePoints, fp, MinSpaceFP)) {
                     return true;
                 }

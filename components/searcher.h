@@ -10,7 +10,7 @@ public:
     FeaturePointSearcher();
 
     void Search(FastSVM const& model);
-    PointType SearchFromSeed(FastSVM const& model, PointType const& seed);
+    PointType SearchFromSeed(FastSVM const& model, PointType const& seed, float * gn2gn = 0);
 
     void ChooseSeeds(PointCloud const& cloud, std::vector<float> const& gradientNorms);
     void OneStageSearch(

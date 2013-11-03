@@ -1,11 +1,11 @@
-#include "baseapp.h"
-#include "analysis.h"
-#include "fastsvm.h"
-#include "trainset.h"
-#include "searcher.h"
-#include "visualization.h"
-#include "check.h"
-#include "svs.h"
+#include "components/baseapp.h"
+#include "components/analysis.h"
+#include "components/fastsvm.h"
+#include "components/trainset.h"
+#include "components/searcher.h"
+#include "components/visualization.h"
+#include "components/check.h"
+#include "components/svs.h"
 
 #include "pcl/common/time.h"
 #include "pcl/common/distances.h"
@@ -27,8 +27,11 @@ public:
         , BorderWidth_(6)
         , TakeProb_(1 / 12.0)
         , NumFP_(10)
+        , DoCheck_(false)
         , DoShowFP_(false)
         , DoShowGradientMap_(false)
+        , DoShowRelLocGradMap_(false)
+        , SaveScreenshot_(false)
     {
         ParseArgs(argc, argv);
     }
@@ -66,6 +69,7 @@ private:
     float TakeProb_;
     int NumFP_;
 
+    bool DoCheck_;
     bool DoShowFP_;
     bool DoShowGradientMap_;
     bool DoShowRelLocGradMap_;
@@ -104,6 +108,7 @@ void App::ParseArgs(int argc, char* argv []) {
         ("numfp", po::value<int>(&NumFP_))
         ("input-path", po::value<std::string>(&InputPath_))
         ("output-path", po::value<std::string>(&OutputPath_))
+        ("docheck", po::value<bool>(&DoCheck_)->zero_tokens())
         ("showfp", po::value<bool>(&DoShowFP_)->zero_tokens())
         ("showgm", po::value<bool>(&DoShowGradientMap_)->zero_tokens())
         ("showrlgm", po::value<bool>(&DoShowRelLocGradMap_)->zero_tokens())
@@ -166,10 +171,12 @@ int App::Run() {
 }
 
 void App::Learn() {
-    TrainingSetGenerator tsg(Resolution_, BorderWidth_, TakeProb_);
+    CalcDistanceToNN();
+
+    TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
     cv::Mat objects;
     cv::Mat responses;
-    tsg.generate(*Input_, &objects, &responses);
+    tsg.generate(*InputNoNan_, DistToNN_, &objects, &responses);
 
     BaseSVMParams svmParams;
     SetSVMParams(&svmParams);
@@ -224,8 +231,10 @@ void App::PrintParameters() {
 }
 
 void App::PrintStatistics() {
-    std::cout << "Accuracy is " << Checker_.Accuracy()  << std::endl;
-    std::cout << Checker_.LearntRatio() << " of the shape is learnt" << std::endl;
+    if (DoCheck_) {
+        std::cout << "Accuracy is " << Checker_.Accuracy()  << std::endl;
+        std::cout << Checker_.LearntRatio() << " of the shape is learnt" << std::endl;
+    }
 }
 
 void App::PrintReport() {
@@ -252,7 +261,7 @@ void App::PrintGradientNorms() {
 void App::ShowFeaturePoints() {
     TUMDataSetVisualizer viewer(CameraDescription_);
     viewer.EasyAdd(InputNoNan_, "input");
-    viewer.EasyAdd(Searcher_.Seeds, "seeds", 0, 0, 255, 5);
+    // viewer.EasyAdd(Searcher_.Seeds, "seeds", 0, 0, 255, 5);
     viewer.EasyAdd(Searcher_.FeaturePoints, "fp", 255, 0, 0, 5);
     viewer.Run(SaveScreenshotPath_);
 }
@@ -296,7 +305,9 @@ void App::CalcGradientNormsAndCheck() {
         DecisionFunction df;
         SVM_.buildDecisionFunctionEstimate(point, &df);
         GradientNorms_[i] = df.gradient(point).getVector3fMap().norm();
-        Checker_.Check(df, point, DistToNN_[i]);
+        if (DoCheck_) {
+            Checker_.Check(df, point, DistToNN_[i]);
+        }
     }
     MinGradientNorm_ = quantile(GradientNorms_, 0.01);
     MaxGradientNorm_ = quantile(GradientNorms_, 0.99);

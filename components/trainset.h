@@ -7,16 +7,18 @@
 class TrainingSetGenerator {
 public:
     TrainingSetGenerator(
-            float resolution,
             float width,
             float prob)
-        : Resolution_(resolution)
-        , Width_(width)
+        : Width_(width)
         , Prob_(prob)
     {
     }
 
-    void generate(PointCloud const& input, cv::Mat * objects, cv::Mat * responses) {
+    void generate(PointCloud const& input,
+                  std::vector<float> const& localRes,
+                  cv::Mat * objects,
+                  cv::Mat * responses)
+    {
         PointCloud classes [2];
 
         for (int i = 0; i < input.size(); ++i) {
@@ -28,7 +30,7 @@ public:
             RangeImagePoint rip(point);
             for (int j = -Width_ + 1; j <= Width_; ++j) {
                 if (tossCoin()) {
-                    classes[j <= 0 ? 0 : 1].push_back(rip.shift(Resolution_, j));
+                    classes[j <= 0 ? 0 : 1].push_back(rip.shift(localRes[i], j));
                 }
             }
         }

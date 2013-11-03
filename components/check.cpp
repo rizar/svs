@@ -7,11 +7,11 @@ void ModelChecker::Check(DecisionFunction const& df, PointType const& point, flo
     bool failed = false;
     for (int i = 0; i < CheckWidth; ++i) {
         RangeImagePoint rip(point);
-        if (df.decisionFunction(rip.shift(step, -CheckOffset - i)) < 0) {
+        if (df.decisionFunction(rip.shift(step, -CheckOffset - i)) < 1e-5) {
             failed = true;
             FailedPoints_++;
         }
-        if (df.decisionFunction(rip.shift(step, CheckOffset + 1 + i)) > 0) {
+        if (df.decisionFunction(rip.shift(step, CheckOffset + 1 + i)) > -1e-5) {
             failed = true;
             FailedPoints_++;
         }
@@ -20,7 +20,7 @@ void ModelChecker::Check(DecisionFunction const& df, PointType const& point, flo
 }
 
 float ModelChecker::Accuracy() const {
-    return 1 - FailedPoints_ / static_cast<float>(CheckWidth * NumChecks_);
+    return 1 - FailedPoints_ / static_cast<float>(CheckWidth * 2 * NumChecks_);
 }
 
 float ModelChecker::LearntRatio() const {

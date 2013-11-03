@@ -24,18 +24,22 @@ public:
     {
     }
 
-    DecisionFunction(float gamma,
+    DecisionFunction(
+            float gamma,
             std::vector<PointType> const& sv,
-            std::vector<float> const& alpha)
+            std::vector<float> const& alpha,
+            float rho)
         : SV_(sv)
         , Alpha_(alpha)
         , Gamma_(gamma)
+        , Rho_(rho)
     {
         assert(SV_.size() == Alpha_.size());
     }
 
-    void reset(float gamma) {
+    void reset(float gamma, float rho) {
         Gamma_ = gamma;
+        Rho_ = rho;
         SV_.clear();
         Alpha_.clear();
     }
@@ -104,6 +108,7 @@ public:
     std::vector<PointType> SV_;
     std::vector<float> Alpha_;
     float Gamma_;
+    float Rho_;
 };
 
 class GradientSquaredNormFunctor : public BFGSDummyFunctor<double, 3> {
@@ -191,9 +196,9 @@ public:
         Indices_.clear();
         Distances_.clear();
         // hardcoded constant is todo
-        SVTree->radiusSearch(point, 4 * kernelWidth, Indices_, Distances_);
+        SVTree->radiusSearch(point, 3 * kernelWidth, Indices_, Distances_);
 
-        df->reset(get_params().gamma);
+        df->reset(get_params().gamma, decision_func->rho);
         for (int i = 0; i < Indices_.size(); ++i) {
             df->addSupportVector(svAsPoint(Indices_[i]), -get_alpha(Indices_[i]));
         }
