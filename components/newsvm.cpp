@@ -1,5 +1,7 @@
 #include "newsvm.h"
 
+#include "utilities/prettyprint.hpp"
+
 bool isLowerSupport(int label, SVMFloat alpha, SVMFloat C) {
     return (alpha < C && label == 1) || (alpha > 0 && label == -1);
 }
@@ -73,12 +75,8 @@ void Solution::Update(int idx, int label, float C) {
 }
 
 void Solution::DebugPrint(std::ostream & ostr) {
-    ostr << "Alphas:" << std::endl;
-    debugPrint(Alphas, ostr);
-    ostr << "Grad:" << std::endl;
-    debugPrint(Grad, ostr);
-    ostr << "Segments: " << std::endl;
-    debugPrint(Segs_, ostr);
+    ostr << "Alphas: " << Alphas << std::endl;
+    ostr << "Grad: " << Grad << std::endl;
 }
 
 void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
@@ -100,12 +98,10 @@ void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
 }
 
 bool SVM3D::Iterate() {
-    /*
 #ifndef NDEBUG
     std::cerr << "After " << Iteration << std::endl;
     Sol_.DebugPrint(std::cerr);
 #endif
-    */
 
     // check for convergence
     if (Sol_.LowerValue() - Sol_.UpperValue() < Eps_) {
@@ -115,7 +111,7 @@ bool SVM3D::Iterate() {
     int const i = Sol_.UpperOutlier();
     int const j = Sol_.LowerOutlier();
 
-    SVMFloat const Qii = KernelValue(i, j);
+    SVMFloat const Qii = KernelValue(i, i);
     SVMFloat const Qij = KernelValue(i, j);
     SVMFloat const Qjj = KernelValue(j, j);
 
