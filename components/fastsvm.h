@@ -166,14 +166,18 @@ public:
 
         int nSV = get_support_vector_count();
         std::cerr << nSV << " support vectors" << std::endl;
+    }
 
-        int maxAlphas = 0;
-        for (int i = 0; i < nSV; ++i) {
-            if (get_alpha(i) > params.C - 1e-3) {
-                maxAlphas++;
+    void train(PointCloud const& cloud, std::vector<int> labels, BaseSVMParams const& params) {
+        cv::Mat objects(cloud.size(), 3, CV_32FC1);
+        cv::Mat responses(cloud.size(), 1, CV_32FC1);
+        for (int i = 0; i < objects.rows; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                objects.at<float>(i, j) = cloud[i].getVector3fMap()(j);
             }
+            responses.at<float>(i) = labels[i];
         }
-        std::cerr << maxAlphas << " support vectors classified wrongly" << std::endl;
+        train(objects, responses, params);
     }
 
     float predict(PointType const& point, bool retDFVal = false) const {

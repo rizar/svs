@@ -1,7 +1,9 @@
 set tags=./tags,./TAGS,tags,TAGS,/usr/local/include/opencv2/.tags,/usr/include/pcl-1.7/pcl/.tags
 set path=.,/usr/include,,/usr/local/include,/usr/local/include/opencv2,/usr/include/pcl-1.7
 
-map <leader>bd :set makeprg=cd\ ../debug;\ make\ -j4\ VERBOSE=1<CR>:make<CR>
-map <leader>br :set makeprg=cd\ ../release;\ make\ -j4\ VERBOSE=1<CR>:make<CR>
-map <leader>td :set makeprg=cd\ ../debug;\ make\ -j4\ VERBOSE=1\ svs<CR>:make<CR>
-map <leader>tr :set makeprg=cd\ ../release;\ make\ -j4\ VERBOSE=1\ svs<CR>:make<CR>
+let g:make_command='make -j4 VERBOSE=1 '
+
+map <leader>bd :let &makeprg='cd ../debug; ' . g:make_command<CR> :make<CR>
+map <leader>br :let &makeprg='cd ../release; ' . g:make_command<CR> :make<CR>
+map <leader>td :let &makeprg='cd ../debug; ' . g:make_command . g:make_target<CR> :make<CR>
+map <leader>tr :let &makeprg='cd ../release; ' . g:make_command . g:make_target<CR> :make<CR>
