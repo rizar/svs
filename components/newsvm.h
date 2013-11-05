@@ -1,8 +1,13 @@
 #include "common.h"
 
+#include <memory>
+
 typedef double SVMFloat;
 SVMFloat const SVM_INF = std::numeric_limits<SVMFloat>::max();
 SVMFloat const SVM_EPS = std::numeric_limits<SVMFloat>::epsilon();
+
+class IGradientModificationStrategy;
+class SVM3D;
 
 struct SegmentInfo {
     SVMFloat Up;
@@ -58,7 +63,22 @@ private:
     std::vector<int> Status_;
 };
 
+class IGradientModificationStrategy {
+public:
+    virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha) = 0;
+    void ModifyGradient(int idx, SVMFloat value);
+
+public:
+    SVM3D * Parent;
+};
+
+class DefaultGradientModificationStrategy : public IGradientModificationStrategy {
+    virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha);
+};
+
 class SVM3D {
+    friend class IGradientModificationStrategy;
+
 public:
     SVM3D()
         : Iteration(0)
@@ -67,6 +87,7 @@ public:
         , MinusGamma_(-Gamma_)
         , Eps_(1e-3)
     {
+        Strategy_.reset(new DefaultGradientModificationStrategy);
     }
 
     void SetParams(SVMFloat C, SVMFloat gamma, SVMFloat eps) {
@@ -82,10 +103,22 @@ public:
         return &Sol_.Alphas[0];
     }
 
-private:
+    int PointCount() const {
+        return N_;
+    }
+
+    PointType const* Points() const {
+        return Points_;
+    }
+
+    int const* Labels() const {
+        return Labels_;
+    }
+
     SVMFloat KernelValue(int i, int j) const;
     SVMFloat QValue(int i, int j) const;
 
+private:
     void Init();
     bool Iterate();
 
@@ -109,4 +142,6 @@ private:
     int const* Labels_;
 
     Solution Sol_;
+
+    std::shared_ptr<IGradientModificationStrategy> Strategy_;
 };

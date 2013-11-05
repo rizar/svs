@@ -93,6 +93,17 @@ void Solution::DebugPrint(std::ostream & ostr) {
     ostr << Alphas << ' ' << Grad << std::endl;
 }
 
+void IGradientModificationStrategy::ModifyGradient(int idx, SVMFloat value) {
+    Parent->Sol_.Grad[idx] += value;
+    Parent->Sol_.Update(idx, Parent->Labels_[idx]);
+}
+
+void DefaultGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFloat deltaAlpha) {
+    for (int k = 0; k < Parent->PointCount(); ++k) {
+        ModifyGradient(k, Parent->QValue(idx, k) * deltaAlpha);
+    }
+}
+
 void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
     assert(points.size() == labels.size());
     N_ = points.size();
@@ -101,6 +112,7 @@ void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
     Points_ = &points[0];
     Labels_ = &labels[0];
 
+    Strategy_->Parent = this;
     Sol_.Init(N_, C_, Labels_);
     while (Iterate()) {
         Iteration++;
@@ -206,11 +218,8 @@ bool SVM3D::Iterate() {
     SVMFloat const deltaAi = Ai - oldAi;
     SVMFloat const deltaAj = Aj - oldAj;
 
-    for (int k = 0; k < N_; ++k) {
-        Sol_.Grad[k] += QValue(i, k) * deltaAi;
-        Sol_.Grad[k] += QValue(j, k) * deltaAj;
-        Sol_.Update(k, Labels_[k]);
-    }
+    Strategy_->ReflectAlphaChange(i, deltaAi);
+    Strategy_->ReflectAlphaChange(j, deltaAj);
 
     return true;
 }
