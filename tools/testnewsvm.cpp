@@ -14,6 +14,8 @@ namespace po = boost::program_options;
 
 class App {
 public:
+    App();
+
     void ParseArgs(int argc, char* argv []);
     void Run();
 
@@ -23,6 +25,9 @@ private:
     void RunOld();
 
 private:
+    bool DoRunNew_;
+    bool DoRunOld_;
+
     int GridSize_;
     int NPoints_;
 
@@ -32,6 +37,12 @@ private:
     SVM3D NewSVM_;
     FastSVM OldSVM_;
 };
+
+App::App()
+    : DoRunNew_(true)
+    , DoRunOld_(false)
+{
+}
 
 void App::ParseArgs(int argc, char* argv []) {
     po::options_description desc;
@@ -70,6 +81,7 @@ void App::RunNew() {
     pcl::ScopeTime st("New SVM");
 
     NewSVM_.SetParams(1, 1 / 3.0, 1e-3);
+    NewSVM_.SetStrategy(new PrecomputedGradientModificationStrategy);
     NewSVM_.Train(Objects_, Labels_);
     std::cout << "New SVM converged in " << NewSVM_.Iteration << " iterations" << std::endl;
     std::cout << NewSVM_.SVCount << " support vectors" << std::endl;
@@ -93,8 +105,12 @@ void App::RunOld() {
 
 void App::Run() {
     Generate();
-    RunNew();
-    RunOld();
+    if (DoRunNew_) {
+        RunNew();
+    }
+    if (DoRunOld_) {
+        RunOld();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

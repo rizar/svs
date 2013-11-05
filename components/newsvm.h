@@ -68,12 +68,31 @@ public:
     virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha) = 0;
     void ModifyGradient(int idx, SVMFloat value);
 
-public:
-    SVM3D * Parent;
+    virtual void InitializeFor(SVM3D * parent) {
+        Parent_ = parent;
+    }
+
+    SVM3D * Parent() {
+        return Parent_;
+    }
+
+private:
+    SVM3D * Parent_;
 };
 
 class DefaultGradientModificationStrategy : public IGradientModificationStrategy {
+public:
     virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha);
+};
+
+class PrecomputedGradientModificationStrategy : public IGradientModificationStrategy {
+public:
+    virtual void InitializeFor(SVM3D * parent);
+    virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha);
+
+private:
+    // force float here because of memory
+    std::vector< std::vector<float> > QValues_;
 };
 
 class SVM3D {
@@ -88,6 +107,10 @@ public:
         , Eps_(1e-3)
     {
         Strategy_.reset(new DefaultGradientModificationStrategy);
+    }
+
+    void SetStrategy(IGradientModificationStrategy * strategy) {
+        Strategy_.reset(strategy);
     }
 
     void SetParams(SVMFloat C, SVMFloat gamma, SVMFloat eps) {

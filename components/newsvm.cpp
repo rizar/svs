@@ -94,13 +94,31 @@ void Solution::DebugPrint(std::ostream & ostr) {
 }
 
 void IGradientModificationStrategy::ModifyGradient(int idx, SVMFloat value) {
-    Parent->Sol_.Grad[idx] += value;
-    Parent->Sol_.Update(idx, Parent->Labels_[idx]);
+    Parent()->Sol_.Grad[idx] += value;
+    Parent()->Sol_.Update(idx, Parent()->Labels_[idx]);
 }
 
 void DefaultGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFloat deltaAlpha) {
-    for (int k = 0; k < Parent->PointCount(); ++k) {
-        ModifyGradient(k, Parent->QValue(idx, k) * deltaAlpha);
+    for (int k = 0; k < Parent()->PointCount(); ++k) {
+        ModifyGradient(k, Parent()->QValue(idx, k) * deltaAlpha);
+    }
+}
+
+void PrecomputedGradientModificationStrategy::InitializeFor(SVM3D * parent) {
+    IGradientModificationStrategy::InitializeFor(parent);
+
+    QValues_.resize(Parent()->PointCount());
+    for (int i = 0; i < Parent()->PointCount(); ++i) {
+        QValues_[i].resize(Parent()->PointCount());
+        for (int j = 0; j < Parent()->PointCount(); ++j) {
+            QValues_[i][j] = Parent()->QValue(i, j);
+        }
+    }
+}
+
+void PrecomputedGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFloat deltaAlpha) {
+    for (int k = 0; k < Parent()->PointCount(); ++k) {
+        ModifyGradient(k, QValues_[idx][k] * deltaAlpha);
     }
 }
 
@@ -112,7 +130,7 @@ void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
     Points_ = &points[0];
     Labels_ = &labels[0];
 
-    Strategy_->Parent = this;
+    Strategy_->InitializeFor(this);
     Sol_.Init(N_, C_, Labels_);
     while (Iterate()) {
         Iteration++;
@@ -124,10 +142,6 @@ void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
 }
 
 bool SVM3D::Iterate() {
-#ifndef NDEBUG
-    Sol_.DebugPrint(std::cerr);
-#endif
-
     // check for convergence
     if (Sol_.LowerValue() - Sol_.UpperValue() < Eps_) {
         return false;
