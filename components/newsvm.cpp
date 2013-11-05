@@ -2,6 +2,11 @@
 
 #include "utilities/prettyprint.hpp"
 
+enum {
+    LOW_SUPPORT_FLAG = 1,
+    UP_SUPPORT_FLAG = 2
+};
+
 bool isLowerSupport(int label, SVMFloat alpha, SVMFloat C) {
     return (alpha < C && label == 1) || (alpha > 0 && label == -1);
 }
@@ -10,16 +15,16 @@ bool isUpperSupport(int label, SVMFloat alpha, SVMFloat C) {
     return (alpha < C && label == -1) || (alpha > 0 && label == 1);
 }
 
-void SegmentInfo::Init(int idx, int label, SVMFloat alpha, SVMFloat C, SVMFloat grad) {
+void SegmentInfo::Init(int idx, SVMFloat minusLabelTimesGrad, int status) {
     Up = SVM_INF;
     Low = -SVM_INF;
 
-    if (isLowerSupport(label, alpha, C)) {
-        Low = -label * grad;
+    if (status & LOW_SUPPORT_FLAG) {
+        Low = minusLabelTimesGrad;
         LowIdx = idx;
     }
-    if (isUpperSupport(label, alpha, C)) {
-        Up = -label * grad;
+    if (status & UP_SUPPORT_FLAG) {
+        Up = minusLabelTimesGrad;
         UpIdx = idx;
     }
 }
@@ -54,19 +59,29 @@ void Solution::Init(int n, SVMFloat C, int const* labels) {
     Alphas.resize(N_);
     Grad.resize(N_, -1);
 
+    Status_.resize(N_);
+    for (int i = 0; i < N_; ++i) {
+        UpdateStatus(i, labels[i], C);
+    }
+
     for (M_ = 1; M_ < N_; M_ *= 2);
     Segs_.resize(2 * M_);
 
     for (int i = 0; i < N_; ++i) {
-        Segs_[M_ + i].Init(i, labels[i], Alphas[i], C, Grad[i]);
+        Segs_[M_ + i].Init(i, -labels[i] * Grad[i], Status_[i]);
     }
     for (int i = M_ - 1; i >= 1; --i) {
         Segs_[i].Update(Segs_[2 * i], Segs_[2 * i + 1]);
     }
 }
 
-void Solution::Update(int idx, int label, float C) {
-    Segs_[M_ + idx].Init(idx, label, Alphas[idx], C, Grad[idx]);
+void Solution::UpdateStatus(int idx, int label, float C) {
+    Status_[idx] = isLowerSupport(label, Alphas[idx], C)
+        + (isUpperSupport(label, Alphas[idx], C) << 1);
+}
+
+void Solution::Update(int idx, int label) {
+    Segs_[M_ + idx].Init(idx, -label * Grad[idx], Status_[idx]);
     for (int i = (M_ + idx) / 2; i > 0; i /= 2) {
         if (! Segs_[i].Update(Segs_[2 * i], Segs_[2 * i + 1])) {
             break;
@@ -75,8 +90,7 @@ void Solution::Update(int idx, int label, float C) {
 }
 
 void Solution::DebugPrint(std::ostream & ostr) {
-    ostr << "Alphas: " << Alphas << std::endl;
-    ostr << "Grad: " << Grad << std::endl;
+    ostr << Alphas << ' ' << Grad << std::endl;
 }
 
 void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
@@ -99,7 +113,6 @@ void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
 
 bool SVM3D::Iterate() {
 #ifndef NDEBUG
-    std::cerr << "After " << Iteration << std::endl;
     Sol_.DebugPrint(std::cerr);
 #endif
 
@@ -184,8 +197,11 @@ bool SVM3D::Iterate() {
         }
     }
 
-    Sol_.Update(i, Labels_[i], C_);
-    Sol_.Update(j, Labels_[j], C_);
+    Sol_.UpdateStatus(i, Labels_[i], C_);
+    Sol_.UpdateStatus(j, Labels_[j], C_);
+
+    Sol_.Update(i, Labels_[i]);
+    Sol_.Update(j, Labels_[j]);
 
     SVMFloat const deltaAi = Ai - oldAi;
     SVMFloat const deltaAj = Aj - oldAj;
@@ -193,7 +209,7 @@ bool SVM3D::Iterate() {
     for (int k = 0; k < N_; ++k) {
         Sol_.Grad[k] += QValue(i, k) * deltaAi;
         Sol_.Grad[k] += QValue(j, k) * deltaAj;
-        Sol_.Update(k, Labels_[k], C_);
+        Sol_.Update(k, Labels_[k]);
     }
 
     return true;

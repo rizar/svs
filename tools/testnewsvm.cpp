@@ -2,6 +2,8 @@
 #include "components/fastsvm.h"
 #include "components/newsvm.h"
 
+#include "pcl/common/time.h"
+
 #include "boost/program_options.hpp"
 
 #include <iostream>
@@ -65,6 +67,8 @@ void App::Generate() {
 }
 
 void App::RunNew() {
+    pcl::ScopeTime st("New SVM");
+
     NewSVM_.SetParams(1, 1 / 3.0, 1e-3);
     NewSVM_.Train(Objects_, Labels_);
     std::cout << "New SVM converged in " << NewSVM_.Iteration << " iterations" << std::endl;
@@ -73,6 +77,8 @@ void App::RunNew() {
 }
 
 void App::RunOld() {
+    pcl::ScopeTime st("Old SVM");
+
     BaseSVMParams params;
     params.svm_type = BaseSVM::C_SVC;
     params.kernel_type = BaseSVM::RBF;

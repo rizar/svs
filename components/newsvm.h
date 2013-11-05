@@ -16,7 +16,7 @@ struct SegmentInfo {
     {
     }
 
-    void Init(int idx, int label, SVMFloat alpha, SVMFloat C, SVMFloat grad);
+    void Init(int idx, SVMFloat grad, int status);
     bool Update(SegmentInfo const& left, SegmentInfo const& right);
 };
 
@@ -40,7 +40,8 @@ public:
         return Segs_[1].Low;
     }
 
-    void Update(int idx, int label, float C);
+    void UpdateStatus(int idx, int label, float C);
+    void Update(int idx, int label);
 
     void DebugPrint(std::ostream & ostr);
 
@@ -54,6 +55,7 @@ private:
     int M_;
 
     std::vector<SegmentInfo> Segs_;
+    std::vector<int> Status_;
 };
 
 class SVM3D {

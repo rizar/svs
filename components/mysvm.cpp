@@ -914,9 +914,6 @@ namespace My {
         // 2. optimization loop
         for(;;)
         {
-            std::cerr << "alpha: " << pretty_print_array(alpha, alpha_count) << std::endl;
-            std::cerr << "G: " << pretty_print_array(G, alpha_count) << std::endl;
-
             double C_i, C_j;
             double old_alpha_i, old_alpha_j, alpha_i, alpha_j;
             double delta_alpha_i, delta_alpha_j;
