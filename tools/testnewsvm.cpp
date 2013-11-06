@@ -34,9 +34,7 @@ public:
         , Num2Grid_(num2grid)
     {
         Radius_ = static_cast<int>(ceil(sqrt(-log(kernelThreshold)) * kernelWidth));
-#ifndef NDEBUG
         std::cerr << "GridStrategy: Radius: " << Radius_ << std::endl;
-#endif
     }
 
     virtual void InitializeFor(SVM3D * parent) {

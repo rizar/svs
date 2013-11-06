@@ -64,19 +64,25 @@ private:
 };
 
 class IGradientModificationStrategy {
+    friend class SVM3D;
+
 public:
     virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha) = 0;
     void ModifyGradient(int idx, SVMFloat value);
-
-    virtual void InitializeFor(SVM3D * parent) {
-        Parent_ = parent;
-    }
+    virtual void InitializeFor(SVM3D * parent);
 
     SVM3D * Parent() {
         return Parent_;
     }
 
 private:
+    void StartIteration();
+    void FinishIteration();
+
+private:
+    std::vector<int> Version_;
+    std::vector<int> ToUpdate_;
+
     SVM3D * Parent_;
 };
 

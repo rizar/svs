@@ -93,9 +93,28 @@ void Solution::DebugPrint(std::ostream & ostr) {
     ostr << Alphas << ' ' << Grad << std::endl;
 }
 
+void IGradientModificationStrategy::InitializeFor(SVM3D * parent) {
+    Parent_ = parent;
+    Version_.resize(Parent_->PointCount(), -1);
+}
+
 void IGradientModificationStrategy::ModifyGradient(int idx, SVMFloat value) {
     Parent()->Sol_.Grad[idx] += value;
-    Parent()->Sol_.Update(idx, Parent()->Labels_[idx]);
+    if (Version_[idx] < Parent()->Iteration) {
+        Version_[idx] = Parent()->Iteration;
+        ToUpdate_.push_back(idx);
+    }
+}
+
+void IGradientModificationStrategy::StartIteration() {
+    ToUpdate_.clear();
+}
+
+void IGradientModificationStrategy::FinishIteration() {
+    for (int i = 0; i < ToUpdate_.size(); ++i) {
+        int const idx = ToUpdate_[i];
+        Parent()->Sol_.Update(idx, Parent()->Labels_[idx]);
+    }
 }
 
 void DefaultGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFloat deltaAlpha) {
@@ -147,12 +166,14 @@ bool SVM3D::Iterate() {
         return false;
     }
 
+    Strategy_->StartIteration();
+
     int const i = Sol_.UpperOutlier();
     int const j = Sol_.LowerOutlier();
 
     SVMFloat const Qii = KernelValue(i, i);
-    SVMFloat const Qij = KernelValue(i, j);
     SVMFloat const Qjj = KernelValue(j, j);
+    SVMFloat const Qij = KernelValue(i, j);
 
     SVMFloat & Gi = Sol_.Grad[i];
     SVMFloat & Gj = Sol_.Grad[j];
@@ -234,6 +255,7 @@ bool SVM3D::Iterate() {
 
     Strategy_->ReflectAlphaChange(i, deltaAi);
     Strategy_->ReflectAlphaChange(j, deltaAj);
+    Strategy_->FinishIteration();
 
     return true;
 }
