@@ -168,7 +168,7 @@ public:
         std::cerr << nSV << " support vectors" << std::endl;
     }
 
-    void train(PointCloud const& cloud, std::vector<int> labels, BaseSVMParams const& params) {
+    void train(PointCloud const& cloud, std::vector<float> labels, BaseSVMParams const& params) {
         cv::Mat objects(cloud.size(), 3, CV_32FC1);
         cv::Mat responses(cloud.size(), 1, CV_32FC1);
         for (int i = 0; i < objects.rows; ++i) {

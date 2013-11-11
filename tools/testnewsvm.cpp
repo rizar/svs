@@ -34,6 +34,7 @@ public:
         , Num2Grid_(num2grid)
     {
         Radius_ = static_cast<int>(ceil(sqrt(-log(kernelThreshold)) * kernelWidth));
+        Radius2_ = sqr(Radius_);
         std::cerr << "GridStrategy: Radius: " << Radius_ << std::endl;
     }
 
@@ -53,8 +54,11 @@ public:
                     for (int k = 0; k < els.size(); ++k) {
                         int const nbhIdx = els[k];
 
-                        Neighbors_[idx].push_back(nbhIdx);
-                        QValues_[idx].push_back(Parent()->QValue(idx, nbhIdx));
+                        float const dist2 = Parent()->Dist2(idx, nbhIdx);
+                        if (dist2 <= Radius2_) {
+                            Neighbors_[idx].push_back(nbhIdx);
+                            QValues_[idx].push_back(Parent()->QValue(idx, nbhIdx, dist2));
+                        }
                     }
                 }
             }
@@ -96,6 +100,7 @@ private:
     int GridWidth_;
     int GridHeight_;
     int Radius_;
+    int Radius2_;
 
     Grid2Num const& Grid2Num_;
     Num2Grid const& Num2Grid_;
@@ -134,7 +139,7 @@ private:
     float TerminateEps_;
 
     PointCloud Objects_;
-    std::vector<int> Labels_;
+    std::vector<float> Labels_;
 
     SVM3D NewSVM_;
     FastSVM OldSVM_;

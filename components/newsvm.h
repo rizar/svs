@@ -27,7 +27,7 @@ struct SegmentInfo {
 
 class Solution {
 public:
-    void Init(int n, SVMFloat C, int const* labels);
+    void Init(int n, SVMFloat C, float const* labels);
 
     int UpperOutlier() const {
         return Segs_[1].UpIdx;
@@ -45,8 +45,8 @@ public:
         return Segs_[1].Low;
     }
 
-    void UpdateStatus(int idx, int label, float C);
-    void Update(int idx, int label);
+    void UpdateStatus(int idx, float label, SVMFloat C);
+    void Update(int idx, float label);
 
     void DebugPrint(std::ostream & ostr);
 
@@ -130,7 +130,7 @@ public:
         Eps_ = eps;
     }
 
-    void Train(PointCloud const& points, std::vector<int> const& labels);
+    void Train(PointCloud const& points, std::vector<float> const& labels);
 
     SVMFloat const* Alphas() {
         return &Sol_.Alphas[0];
@@ -144,12 +144,32 @@ public:
         return Points_;
     }
 
-    int const* Labels() const {
+    float const* Labels() const {
         return Labels_;
     }
 
-    SVMFloat KernelValue(int i, int j) const;
-    SVMFloat QValue(int i, int j) const;
+    SVMFloat Dist2(int i, int j) const {
+        return sqr(Points_[i].x - Points_[j].x) +
+               sqr(Points_[i].y - Points_[j].y) +
+               sqr(Points_[i].z - Points_[j].z);
+    }
+
+    SVMFloat KernelValue(float dist2) const {
+        return exp(MinusGamma_ * dist2);
+    }
+
+    SVMFloat KernelValue(int i, int j) const {
+        return exp(MinusGamma_ * Dist2(i, j));
+    }
+
+    SVMFloat QValue(int i, int j, float dist2) const {
+        return Labels_[i] * Labels_[j] * KernelValue(dist2);
+    }
+
+    SVMFloat QValue(int i, int j) const {
+        return Labels_[i] * Labels_[j] * KernelValue(i, j);
+    }
+
     SVMFloat PivotsOptimality(int i, int j) const;
 
 private:
@@ -173,7 +193,7 @@ private:
 
     int N_;
     PointType const* Points_;
-    int const* Labels_;
+    float const* Labels_;
 
     Solution Sol_;
 

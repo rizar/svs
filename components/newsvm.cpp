@@ -7,11 +7,11 @@ enum {
     UP_SUPPORT_FLAG = 2
 };
 
-bool isLowerSupport(int label, SVMFloat alpha, SVMFloat C) {
+bool isLowerSupport(float label, SVMFloat alpha, SVMFloat C) {
     return (alpha < C && label == 1) || (alpha > 0 && label == -1);
 }
 
-bool isUpperSupport(int label, SVMFloat alpha, SVMFloat C) {
+bool isUpperSupport(float label, SVMFloat alpha, SVMFloat C) {
     return (alpha < C && label == -1) || (alpha > 0 && label == 1);
 }
 
@@ -54,7 +54,7 @@ std::ostream & operator<<(std::ostream & ostr, SegmentInfo const& si) {
     return ostr;
 }
 
-void Solution::Init(int n, SVMFloat C, int const* labels) {
+void Solution::Init(int n, SVMFloat C, float const* labels) {
     N_ = n;
     Alphas.resize(N_);
     Grad.resize(N_, -1);
@@ -75,12 +75,12 @@ void Solution::Init(int n, SVMFloat C, int const* labels) {
     }
 }
 
-void Solution::UpdateStatus(int idx, int label, float C) {
+void Solution::UpdateStatus(int idx, float label, SVMFloat C) {
     Status[idx] = isLowerSupport(label, Alphas[idx], C)
         + (isUpperSupport(label, Alphas[idx], C) << 1);
 }
 
-void Solution::Update(int idx, int label) {
+void Solution::Update(int idx, float label) {
     Segs_[M_ + idx].Init(idx, -label * Grad[idx], Status[idx]);
     for (int i = (M_ + idx) / 2; i > 0; i /= 2) {
         if (! Segs_[i].Update(Segs_[2 * i], Segs_[2 * i + 1])) {
@@ -141,7 +141,7 @@ void PrecomputedGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFlo
     }
 }
 
-void SVM3D::Train(PointCloud const& points, std::vector<int> const& labels) {
+void SVM3D::Train(PointCloud const& points, std::vector<float> const& labels) {
     assert(points.size() == labels.size());
     N_ = points.size();
 
@@ -309,31 +309,19 @@ void SVM3D::CalcRho() {
     Sol_.Rho = nFree > 0 ? sumFree / nFree : (ub + lb) * 0.5;
 }
 
-SVMFloat SVM3D::KernelValue(int i, int j) const {
-    SVMFloat const dist2 =
-        sqr(Points_[i].x - Points_[j].x) +
-        sqr(Points_[i].y - Points_[j].y) +
-        sqr(Points_[i].z - Points_[j].z);
-    return  exp(MinusGamma_ * dist2);
-}
-
-SVMFloat SVM3D::QValue(int i, int j) const {
-    return Labels_[i] * Labels_[j] * KernelValue(i, j);
-}
-
 SVMFloat SVM3D::PivotsOptimality(int i, int j) const {
     bool can = (Sol_.Status[i] & LOW_SUPPORT_FLAG) && (Sol_.Status[j] & UP_SUPPORT_FLAG);
     if (! can) {
         return 0.0;
     }
 
-    float const ygi = -Labels_[i] * Sol_.Grad[i];
-    float const ygj = Labels_[j] * Sol_.Grad[j];
-    float const bij = ygi + ygj;
+    SVMFloat const ygi = -Labels_[i] * Sol_.Grad[i];
+    SVMFloat const ygj = Labels_[j] * Sol_.Grad[j];
+    SVMFloat const bij = ygi + ygj;
     if (bij <= SVM_EPS) {
         return 0.0;
     }
 
-    float const aij = std::max(2 - 2 * KernelValue(i, j), 1e-12);
+    SVMFloat const aij = std::max(2 - 2 * KernelValue(i, j), 1e-12);
     return sqr(bij) / aij;
 }
