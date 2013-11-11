@@ -50,9 +50,11 @@ public:
 
     void DebugPrint(std::ostream & ostr);
 
+
 public:
     std::vector<SVMFloat> Alphas;
     std::vector<SVMFloat> Grad;
+    std::vector<int> Status;
     float Rho;
 
 private:
@@ -60,13 +62,15 @@ private:
     int M_;
 
     std::vector<SegmentInfo> Segs_;
-    std::vector<int> Status_;
 };
 
 class IGradientModificationStrategy {
     friend class SVM3D;
 
 public:
+    virtual void OptimizePivots(int * /*i*/, int * /*j*/) {
+    }
+
     virtual void ReflectAlphaChange(int idx, SVMFloat deltaAlpha) = 0;
     void ModifyGradient(int idx, SVMFloat value);
     virtual void InitializeFor(SVM3D * parent);
@@ -146,6 +150,7 @@ public:
 
     SVMFloat KernelValue(int i, int j) const;
     SVMFloat QValue(int i, int j) const;
+    SVMFloat PivotsOptimality(int i, int j) const;
 
 private:
     void Init();

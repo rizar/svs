@@ -70,6 +70,19 @@ public:
 #endif
     }
 
+    virtual void OptimizePivots(int * i, int * j) {
+        float best = Parent()->PivotsOptimality(*i, *j);
+        std::vector<int> const& nbh = Neighbors_[*i];
+
+        for (int k = 0; k < nbh.size(); ++k) {
+            float const current = Parent()->PivotsOptimality(*i, nbh[k]);
+            if (current > best) {
+                best = current;
+                *j = nbh[k];
+            }
+        }
+    }
+
     virtual void ReflectAlphaChange(int idx, SVMFloat delta) {
         std::vector<int> const& nbh = Neighbors_[idx];
         std::vector<float> const& qv = QValues_[idx];

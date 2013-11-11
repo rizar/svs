@@ -59,7 +59,7 @@ void Solution::Init(int n, SVMFloat C, int const* labels) {
     Alphas.resize(N_);
     Grad.resize(N_, -1);
 
-    Status_.resize(N_);
+    Status.resize(N_);
     for (int i = 0; i < N_; ++i) {
         UpdateStatus(i, labels[i], C);
     }
@@ -68,7 +68,7 @@ void Solution::Init(int n, SVMFloat C, int const* labels) {
     Segs_.resize(2 * M_);
 
     for (int i = 0; i < N_; ++i) {
-        Segs_[M_ + i].Init(i, -labels[i] * Grad[i], Status_[i]);
+        Segs_[M_ + i].Init(i, -labels[i] * Grad[i], Status[i]);
     }
     for (int i = M_ - 1; i >= 1; --i) {
         Segs_[i].Update(Segs_[2 * i], Segs_[2 * i + 1]);
@@ -76,12 +76,12 @@ void Solution::Init(int n, SVMFloat C, int const* labels) {
 }
 
 void Solution::UpdateStatus(int idx, int label, float C) {
-    Status_[idx] = isLowerSupport(label, Alphas[idx], C)
+    Status[idx] = isLowerSupport(label, Alphas[idx], C)
         + (isUpperSupport(label, Alphas[idx], C) << 1);
 }
 
 void Solution::Update(int idx, int label) {
-    Segs_[M_ + idx].Init(idx, -label * Grad[idx], Status_[idx]);
+    Segs_[M_ + idx].Init(idx, -label * Grad[idx], Status[idx]);
     for (int i = (M_ + idx) / 2; i > 0; i /= 2) {
         if (! Segs_[i].Update(Segs_[2 * i], Segs_[2 * i + 1])) {
             break;
@@ -168,12 +168,13 @@ bool SVM3D::Iterate() {
 
     Strategy_->StartIteration();
 
-    int const i = Sol_.UpperOutlier();
-    int const j = Sol_.LowerOutlier();
+    int i = Sol_.LowerOutlier();
+    int j = Sol_.UpperOutlier();
+    Strategy_->OptimizePivots(&i, &j);
 
     SVMFloat const Qii = 1;
     SVMFloat const Qjj = 1;
-    SVMFloat const Qij = KernelValue(i, j);
+    SVMFloat const Qij = QValue(i, j);
 
     SVMFloat & Gi = Sol_.Grad[i];
     SVMFloat & Gj = Sol_.Grad[j];
@@ -320,3 +321,19 @@ SVMFloat SVM3D::QValue(int i, int j) const {
     return Labels_[i] * Labels_[j] * KernelValue(i, j);
 }
 
+SVMFloat SVM3D::PivotsOptimality(int i, int j) const {
+    bool can = (Sol_.Status[i] & LOW_SUPPORT_FLAG) && (Sol_.Status[j] & UP_SUPPORT_FLAG);
+    if (! can) {
+        return 0.0;
+    }
+
+    float const ygi = -Labels_[i] * Sol_.Grad[i];
+    float const ygj = Labels_[j] * Sol_.Grad[j];
+    float const bij = ygi + ygj;
+    if (bij <= SVM_EPS) {
+        return 0.0;
+    }
+
+    float const aij = std::max(2 - 2 * KernelValue(i, j), 1e-12);
+    return sqr(bij) / aij;
+}
