@@ -171,8 +171,8 @@ bool SVM3D::Iterate() {
     int const i = Sol_.UpperOutlier();
     int const j = Sol_.LowerOutlier();
 
-    SVMFloat const Qii = KernelValue(i, i);
-    SVMFloat const Qjj = KernelValue(j, j);
+    SVMFloat const Qii = 1;
+    SVMFloat const Qjj = 1;
     SVMFloat const Qij = KernelValue(i, j);
 
     SVMFloat & Gi = Sol_.Grad[i];
