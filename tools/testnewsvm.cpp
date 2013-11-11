@@ -47,6 +47,8 @@ public:
         for (int idx = 0; idx < parent->PointCount(); ++idx) {
             int const x = Num2Grid_[idx].first;
             int const y = Num2Grid_[idx].second;
+            std::vector<int> & nbh = Neighbors_[idx];
+            std::vector<float> & qvls = QValues_[idx];
 
             for (int i = -std::min(Radius_, x); i <= std::min(GridWidth_ - 1 - x, Radius_); ++i) {
                 for (int j = -std::min(Radius_, y); j <= std::min(GridHeight_ - 1 - y, Radius_); ++j) {
@@ -56,12 +58,18 @@ public:
 
                         float const dist2 = Parent()->Dist2(idx, nbhIdx);
                         if (dist2 <= Radius2_) {
-                            Neighbors_[idx].push_back(nbhIdx);
-                            QValues_[idx].push_back(Parent()->QValue(idx, nbhIdx, dist2));
+                            nbh.push_back(nbhIdx);
+                            qvls.push_back(Parent()->QValue(idx, nbhIdx, dist2));
                         }
                     }
                 }
             }
+
+            // save memory
+            std::vector<int> tmpInts(nbh);
+            std::vector<float> tmpFloats(qvls);
+            nbh.swap(tmpInts);
+            qvls.swap(tmpFloats);
         }
 
 #ifndef NDEBUG
