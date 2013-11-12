@@ -83,7 +83,6 @@ private:
 
     std::string OutputPath_;
 
-
     FastSVM SVM_;
     FeaturePointSearcher Searcher_;
     ModelChecker Checker_;
@@ -196,9 +195,6 @@ void App::Search() {
     Searcher_.MinSpaceSeeds = 10 * Resolution_;
     Searcher_.MinSpaceFP = 5 * Resolution_;
     Searcher_.OneStageSearch(SVM_, *InputNoNan_, RelLocGradNorms_);
-    // Searcher_.ChooseSeeds(*InputNoNan_, GradientNorms_);
-    // Searcher_.ChooseSeeds(*InputNoNan_, RelLocGradNorms_);
-    // Searcher_.Search(SVM_);
 }
 
 void App::SetSVMParams(BaseSVMParams * params) {
@@ -261,7 +257,6 @@ void App::PrintGradientNorms() {
 void App::ShowFeaturePoints() {
     TUMDataSetVisualizer viewer(CameraDescription_);
     viewer.EasyAdd(InputNoNan_, "input");
-    // viewer.EasyAdd(Searcher_.Seeds, "seeds", 0, 0, 255, 5);
     viewer.EasyAdd(Searcher_.FeaturePoints, "fp", 255, 0, 0, 5);
     viewer.Run(SaveScreenshotPath_);
 }
