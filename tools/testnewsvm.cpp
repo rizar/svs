@@ -276,7 +276,7 @@ void App::SaveAlphaMap() {
             int const idx = i * GridSize_ + j;
             float const relAlpha = NewSVM_.Alphas()[idx] / MaxAlpha_;
 
-            image.at<cv::Vec3b>(i, j) = cv::Vec3b(255 * relAlpha, 0, 255 * (1 - relAlpha));
+            image.at<cv::Vec3b>(i, j) = cv::Vec3b(255 * (1 - relAlpha), 0, 255 * relAlpha);
         }
     }
 
