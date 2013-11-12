@@ -43,23 +43,12 @@ public:
 
         QValues_.resize(parent->PointCount());
         Neighbors_.resize(parent->PointCount());
-
-        for (int idx = 0; idx < parent->PointCount(); ++idx) {
-            InitializeNeighbors(idx);
-        }
-
-#ifndef NDEBUG
-        float totalNumNeighbors = 0.0;
-        for (int i = 0; i < parent->PointCount(); ++i) {
-            totalNumNeighbors += Neighbors_[i].size();
-        }
-        std::cerr << "GridStrategy: Average number of neighbors: "
-                  << totalNumNeighbors / Neighbors_.size() << std::endl;
-#endif
-    }
+   }
 
     virtual void OptimizePivots(int * i, int * j) {
         float best = Parent()->PivotsOptimality(*i, *j);
+
+        InitializeNeighbors(*i);
         std::vector<int> const& nbh = Neighbors_[*i];
 
         for (int k = 0; k < nbh.size(); ++k) {
@@ -72,6 +61,7 @@ public:
     }
 
     virtual void ReflectAlphaChange(int idx, SVMFloat delta) {
+        InitializeNeighbors(idx);
         std::vector<int> const& nbh = Neighbors_[idx];
         std::vector<float> const& qv = QValues_[idx];
 
@@ -82,10 +72,15 @@ public:
 
 private:
     void InitializeNeighbors(int idx) {
-        int const x = Num2Grid_[idx].first;
-        int const y = Num2Grid_[idx].second;
         std::vector<int> & nbh = Neighbors_[idx];
         std::vector<float> & qvls = QValues_[idx];
+
+        if (nbh.size()) {
+            return;
+        }
+
+        int const x = Num2Grid_[idx].first;
+        int const y = Num2Grid_[idx].second;
 
         for (int i = -std::min(Radius_, x); i <= std::min(GridWidth_ - 1 - x, Radius_); ++i) {
             for (int j = -std::min(Radius_, y); j <= std::min(GridHeight_ - 1 - y, Radius_); ++j) {
