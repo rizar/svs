@@ -170,7 +170,9 @@ bool SVM3D::Iterate() {
 
     int i = Sol_.LowerOutlier();
     int j = Sol_.UpperOutlier();
-    Strategy_->OptimizePivots(&i, &j);
+    if (Iteration <= 100) {
+        Strategy_->OptimizePivots(&i, &j);
+    }
 
     SVMFloat const Qii = 1;
     SVMFloat const Qjj = 1;

@@ -27,11 +27,17 @@ public:
             Grid2Num const& grid2num,
             Num2Grid const& num2grid,
             float kernelWidth,
-            float kernelThreshold)
+            float kernelThreshold,
+            int cacheSize)
         : GridWidth_(gridWidth)
         , GridHeight_(gridHeight)
         , Grid2Num_(grid2num)
         , Num2Grid_(num2grid)
+        , MaxTotalNeighbors_(cacheSize / 8)
+        , TotalNeighbours_(0)
+        , HistoryIndex_(0)
+        , NumCacheMisses_(0)
+        , NumOptimizeFailures_(0)
     {
         Radius_ = static_cast<int>(ceil(sqrt(-log(kernelThreshold)) * kernelWidth));
         Radius2_ = sqr(Radius_);
@@ -43,10 +49,12 @@ public:
 
         QValues_.resize(parent->PointCount());
         Neighbors_.resize(parent->PointCount());
+        LastAccess_.resize(parent->PointCount(), -1);
    }
 
     virtual void OptimizePivots(int * i, int * j) {
         float best = Parent()->PivotsOptimality(*i, *j);
+        int const startJ = *j;
 
         InitializeNeighbors(*i);
         std::vector<int> const& nbh = Neighbors_[*i];
@@ -58,6 +66,8 @@ public:
                 *j = nbh[k];
             }
         }
+
+        NumOptimizeFailures_ += startJ == *j;
     }
 
     virtual void ReflectAlphaChange(int idx, SVMFloat delta) {
@@ -70,13 +80,24 @@ public:
         }
     }
 
+    void PrintStatistics(std::ostream & ostr) const {
+        ostr << "GridStrategy: Number of cache misses: " << NumCacheMisses_ << std::endl;
+        ostr << "GridStrategy: Number of optimization failures: " << NumOptimizeFailures_ << std::endl;
+    }
+
 private:
     void InitializeNeighbors(int idx) {
+        bool firstTime = LastAccess_[idx] == -1;
+        LogAccess(idx);
+
         std::vector<int> & nbh = Neighbors_[idx];
         std::vector<float> & qvls = QValues_[idx];
 
         if (nbh.size()) {
             return;
+        }
+        if (! firstTime) {
+            NumCacheMisses_++;
         }
 
         int const x = Num2Grid_[idx].first;
@@ -97,11 +118,39 @@ private:
             }
         }
 
-        // save memory
-        std::vector<int> tmpInts(nbh);
-        std::vector<float> tmpFloats(qvls);
-        nbh.swap(tmpInts);
-        qvls.swap(tmpFloats);
+        RepackNeighbors(idx);
+        RegisterNewNeighbors(nbh.size());
+    }
+
+    void LogAccess(int idx) {
+        History_.push_back(idx);
+        LastAccess_[idx] = History_.size() - 1;
+    }
+
+    void RegisterNewNeighbors(int num) {
+        TotalNeighbours_ += num;
+        while (TotalNeighbours_ > MaxTotalNeighbors_) {
+            int const pointIdx = History_[HistoryIndex_];
+            if (LastAccess_[pointIdx] == HistoryIndex_) {
+                TotalNeighbours_ -= Neighbors_[pointIdx].size();
+                FreeNeighbors(pointIdx);
+            }
+            HistoryIndex_++;
+        }
+    }
+
+    void RepackNeighbors(int idx) {
+        std::vector<int> tmpInts(Neighbors_[idx]);
+        std::vector<float> tmpFloats(QValues_[idx]);
+        Neighbors_[idx].swap(tmpInts);
+        QValues_[idx].swap(tmpFloats);
+    }
+
+    void FreeNeighbors(int idx) {
+        std::vector<int> tmpInts;
+        std::vector<float> tmpFloats;
+        Neighbors_[idx].swap(tmpInts);
+        QValues_[idx].swap(tmpFloats);
     }
 
 private:
@@ -113,8 +162,17 @@ private:
     Grid2Num const& Grid2Num_;
     Num2Grid const& Num2Grid_;
 
+    int MaxTotalNeighbors_;
+    int TotalNeighbours_;
+    int HistoryIndex_;
+    std::vector<int> History_;
+    std::vector<int> LastAccess_;
+
     std::vector< std::vector<int> > Neighbors_;
     std::vector< std::vector<float> > QValues_;
+
+    int NumCacheMisses_;
+    int NumOptimizeFailures_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -229,15 +287,20 @@ void App::RunNew() {
     }
 
     NewSVM_.SetParams(MaxAlpha_, 1 / sqr(KernelWidth_), TerminateEps_);
-    NewSVM_.SetStrategy(
+    GridNeighbourModificationStrategy * strategy =
             new GridNeighbourModificationStrategy(
                 GridSize_, GridSize_,
                 grid2num, num2grid,
-                KernelWidth_, KernelThreshold_));
+                KernelWidth_, KernelThreshold_,
+                1 << 30);
+    std::shared_ptr<IGradientModificationStrategy> strPtr(strategy);
+    NewSVM_.SetStrategy(strPtr);
     NewSVM_.Train(Objects_, Labels_);
+
     std::cout << "New SVM converged in " << NewSVM_.Iteration << " iterations" << std::endl;
     std::cout << NewSVM_.SVCount << " support vectors" << std::endl;
     std::cout << NewSVM_.TargetFunction << " target function" << std::endl;
+    strategy->PrintStatistics(std::cout);
 }
 
 void App::RunOld() {

@@ -123,6 +123,10 @@ public:
         Strategy_.reset(strategy);
     }
 
+    void SetStrategy(std::shared_ptr<IGradientModificationStrategy> strategy) {
+        Strategy_ = strategy;
+    }
+
     void SetParams(SVMFloat C, SVMFloat gamma, SVMFloat eps) {
         C_ = C;
         Gamma_ = gamma;
