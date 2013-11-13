@@ -1052,6 +1052,7 @@ namespace My {
         si.upper_bound_n = C[0];
 
         std::cerr << iter << " iterations had been required" << std::endl;
+        std::cerr << si.obj << " is objective function value" << std::endl;
 
         return true;
     }
