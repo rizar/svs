@@ -1,3 +1,5 @@
+#pragma once
+
 #include "common.h"
 
 #include <memory>
@@ -175,6 +177,7 @@ public:
     }
 
     SVMFloat PivotsOptimality(int i, int j) const;
+    SVMFloat PivotsOptimality(int i, int j, float Qij) const;
 
 private:
     void Init();

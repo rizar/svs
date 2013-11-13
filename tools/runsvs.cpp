@@ -1,11 +1,14 @@
 #include "components/baseapp.h"
 #include "components/analysis.h"
 #include "components/fastsvm.h"
+#include "components/newsvm.h"
 #include "components/trainset.h"
 #include "components/searcher.h"
 #include "components/visualization.h"
 #include "components/check.h"
 #include "components/svs.h"
+
+#include "utilities/prettyprint.hpp"
 
 #include "pcl/common/time.h"
 #include "pcl/common/distances.h"
@@ -13,6 +16,7 @@
 #include "boost/program_options.hpp"
 
 #include <iostream>
+#include <memory>
 
 namespace po = boost::program_options;
 
@@ -22,10 +26,10 @@ public:
         : Seed_(1)
         , MaxAlpha_(32)
         , KernelWidth_(5)
-        , KernelThreshold_(1e-3)
-        , TerminateEps_(1)
-        , BorderWidth_(6)
-        , TakeProb_(1 / 12.0)
+        , KernelThreshold_(1e-5)
+        , TerminateEps_(1e-2)
+        , BorderWidth_(1)
+        , TakeProb_(1.0)
         , NumFP_(10)
         , DoCheck_(false)
         , DoShowFP_(false)
@@ -49,11 +53,11 @@ private:
     void PrintReport();
     void PrintGradientNorms();
 
+    void ExportForLibSVM();
+
     void ShowFeaturePoints();
     void ShowGradientMap();
     void ShowRelativeLocalGradientMap();
-
-    void SetSVMParams(BaseSVMParams * svmParams);
 
     void CalcGradientNormsAndCheck();
     void CalcRelativeLocalGradientNorms();
@@ -74,16 +78,22 @@ private:
     bool DoShowGradientMap_;
     bool DoShowRelLocGradMap_;
     bool SaveScreenshot_;
+    bool UseGrid_ = true;
+
+    std::string CameraDescription_;
 
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
     std::string SaveScreenshotPath_;
-
-    std::string CameraDescription_;
-
     std::string OutputPath_;
+    std::string LibSVMExportPath_;
 
-    FastSVM SVM_;
+    PointCloud::Ptr Objects_;
+    std::vector<float> Labels_;
+    GridNeighbourModificationStrategy::Grid2Num Grid2Num_;
+    GridNeighbourModificationStrategy::Num2Grid Num2Grid_;
+    std::shared_ptr<GridNeighbourModificationStrategy> Strategy_;
+    SVM3D SVM_;
     FeaturePointSearcher Searcher_;
     ModelChecker Checker_;
 
@@ -105,16 +115,18 @@ void App::ParseArgs(int argc, char* argv []) {
         ("kthr", po::value<float>(&KernelThreshold_))
         ("teps", po::value<float>(&TerminateEps_))
         ("numfp", po::value<int>(&NumFP_))
-        ("input-path", po::value<std::string>(&InputPath_))
-        ("output-path", po::value<std::string>(&OutputPath_))
         ("docheck", po::value<bool>(&DoCheck_)->zero_tokens())
         ("showfp", po::value<bool>(&DoShowFP_)->zero_tokens())
         ("showgm", po::value<bool>(&DoShowGradientMap_)->zero_tokens())
         ("showrlgm", po::value<bool>(&DoShowRelLocGradMap_)->zero_tokens())
+        ("usegrid", po::value<bool>(&UseGrid_))
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
-        ("savesc", po::value<std::string>(&SaveScreenshotPath_));
+        ("savesc", po::value<std::string>(&SaveScreenshotPath_))
+        ("input-path", po::value<std::string>(&InputPath_))
+        ("output-path", po::value<std::string>(&OutputPath_))
+        ("libsvm", po::value<std::string>(&LibSVMExportPath_));
 
     po::positional_options_description pos;
     pos.add("input-path", 1);
@@ -141,31 +153,15 @@ int App::Run() {
     Load();
     PrintParameters();
     Learn();
-    Search();
-
-    if (FPReportOutputPath_.size()) {
-        PrintReport();
-    }
-    if (GradientNormsOutputPath_.size()) {
-        PrintGradientNorms();
-    }
-
-    if (DoShowFP_) {
-        ShowFeaturePoints();
-    }
-    if (DoShowGradientMap_) {
-        ShowGradientMap();
-    }
-    if (DoShowRelLocGradMap_) {
-        ShowRelativeLocalGradientMap();
-    }
+    PrintStatistics();
 
     if (OutputPath_.size()) {
         std::ofstream ofstr(OutputPath_);
         SupportVectorShape(Searcher_.FeaturePoints).SaveAsText(ofstr);
     }
 
-    PrintStatistics();
+    ExportForLibSVM();
+
     return 0;
 }
 
@@ -173,46 +169,40 @@ void App::Learn() {
     CalcDistanceToNN();
 
     TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
-    cv::Mat objects;
-    cv::Mat responses;
-    tsg.generate(*InputNoNan_, DistToNN_, &objects, &responses);
+    tsg.Generate(*Input_, DistToNN_);
 
-    BaseSVMParams svmParams;
-    SetSVMParams(&svmParams);
+    Objects_.reset(new PointCloud(tsg.Objects));
+    Labels_ = tsg.Labels;
+    Num2Grid_ = tsg.Num2Grid;
+    Grid2Num_ = tsg.Grid2Num;
+    if (UseGrid_) {
+        Strategy_.reset(new GridNeighbourModificationStrategy(
+                    Input_->height, Input_->width,
+                    Grid2Num_, Num2Grid_,
+                    KernelWidth_, KernelThreshold_, Resolution_,
+                    1 << 30));
+        SVM_.SetStrategy(Strategy_);
+    }
+    SVM_.SetParams(MaxAlpha_, 1 / sqr(KernelWidth_ * Resolution_), TerminateEps_);
 
     {
         pcl::ScopeTime st("SVM");
-        SVM_.train(objects, responses, svmParams);
+        SVM_.Train(*Objects_, Labels_);
     }
 }
 
-void App::Search() {
-    CalcGradientNormsAndCheck();
-    CalcRelativeLocalGradientNorms();
-
-    pcl::ScopeTime st("Search");
-    Searcher_.NumSeeds = NumFP_;
-    Searcher_.MinSpaceSeeds = 10 * Resolution_;
-    Searcher_.MinSpaceFP = 5 * Resolution_;
-    Searcher_.OneStageSearch(SVM_, *InputNoNan_, RelLocGradNorms_);
-}
-
-void App::SetSVMParams(BaseSVMParams * params) {
-    CvTermCriteria termCriteria;
-    termCriteria.type = CV_TERMCRIT_EPS;
-    termCriteria.epsilon = TerminateEps_;
-    params->term_crit = termCriteria;
-
-    params->svm_type = FastSVM::C_SVC;
-    params->C = MaxAlpha_;
-    params->gamma = 1 / sqr(KernelWidth_ * Resolution_);
-
-#ifdef USE_MY_SVM
-    My::kernelThreshold = KernelThreshold_;
-#endif
+void App::ExportForLibSVM() {
+    std::ofstream ofstr(LibSVMExportPath_);
+    for (int i = 0; i < Objects_->size(); ++i) {
+        ofstr << Labels_[i] << ' '
+              << "1:" << Objects_->at(i).x << ' '
+              << "2:" << Objects_->at(i).y << ' '
+              << "3:" << Objects_->at(i).z << '\n';
+    }
 }
 
 void App::PrintParameters() {
+    std::cout << "-------------------- PARAMETERS" << std::endl;
     std::cout << "Seed is " << Seed_ << std::endl;
     std::cout << "Input cloud size is " << InputNoNan_->size() << " points" << std::endl;
     std::cout << "Resolution is " << Resolution_ << std::endl;
@@ -227,116 +217,13 @@ void App::PrintParameters() {
 }
 
 void App::PrintStatistics() {
-    if (DoCheck_) {
-        std::cout << "Accuracy is " << Checker_.Accuracy()  << std::endl;
-        std::cout << Checker_.LearntRatio() << " of the shape is learnt" << std::endl;
-    }
-}
-
-void App::PrintReport() {
-    std::ofstream repOut(FPReportOutputPath_);
-    for (int i = 0; i < Searcher_.Seeds->size(); ++i) {
-        PointType seed = Searcher_.Seeds->at(i);
-        PointType fp = Searcher_.FeaturePoints->at(i);
-        Printer::printStateAtPoint(SVM_, seed, repOut);
-        repOut << "distance in resolutions: "
-               << sqrt(squaredEuclideanDistance(seed, fp)) / Resolution_ << std::endl;
-        Printer::printStateAtPoint(SVM_, fp, repOut);
-        repOut << "---------------" << std::endl;
-    }
-}
-
-void App::PrintGradientNorms() {
-    CalcGradientNormsAndCheck();
-    std::ofstream ofstr(GradientNormsOutputPath_);
-    for (int i = 0; i < InputNoNan_->size(); ++i) {
-        ofstr << GradientNorms_[i] << std::endl;
-    }
-}
-
-void App::ShowFeaturePoints() {
-    TUMDataSetVisualizer viewer(CameraDescription_);
-    viewer.EasyAdd(InputNoNan_, "input");
-    viewer.EasyAdd(Searcher_.FeaturePoints, "fp", 255, 0, 0, 5);
-    viewer.Run(SaveScreenshotPath_);
-}
-
-void App::ShowGradientMap() {
-    CalcGradientNormsAndCheck();
-    PointCloud::Ptr clone(new PointCloud(*InputNoNan_));
-    for (int i = 0; i < clone->size(); ++i) {
-        clone->at(i) = addTemperature(
-                clone->at(i), GradientNorms_[i],
-                (MinGradientNorm_ + MaxGradientNorm_) / 2, MaxGradientNorm_);
-    }
-    TUMDataSetVisualizer viewer(CameraDescription_);
-    viewer.EasyAdd(clone, "gmap", 1);
-    viewer.EasyAdd(Searcher_.FeaturePoints, "fp", 0, 255, 255, 5);
-    viewer.Run(SaveScreenshotPath_);
-}
-
-void App::ShowRelativeLocalGradientMap() {
-    CalcRelativeLocalGradientNorms();
-    PointCloud::Ptr clone(new PointCloud(*InputNoNan_));
-    for (int i = 0; i < clone->size(); ++i) {
-        clone->at(i) = addTemperature(clone->at(i), RelLocGradNorms_[i], 0.5, 1);
-    }
-    TUMDataSetVisualizer viewer(CameraDescription_);
-    viewer.EasyAdd(clone, "gmap", 1);
-    viewer.EasyAdd(Searcher_.FeaturePoints, "fp", 0, 255, 255, 5);
-    viewer.Run(SaveScreenshotPath_);
-}
-
-void App::CalcGradientNormsAndCheck() {
-    if (GradientNorms_.size()) {
-        return;
-    }
-    CalcDistanceToNN();
-    pcl::ScopeTime st("CalcGradientNormsAndCheck");
-    GradientNorms_.resize(InputNoNan_->size());
-    for (int i = 0; i < InputNoNan_->size(); ++i) {
-        PointType point = InputNoNan_->at(i);
-
-        DecisionFunction df;
-        SVM_.buildDecisionFunctionEstimate(point, &df);
-        GradientNorms_[i] = df.gradient(point).getVector3fMap().norm();
-        if (DoCheck_) {
-            Checker_.Check(df, point, DistToNN_[i]);
-        }
-    }
-    MinGradientNorm_ = quantile(GradientNorms_, 0.01);
-    MaxGradientNorm_ = quantile(GradientNorms_, 0.99);
-    std::cout << "Minimum gradient norm " << MinGradientNorm_ << std::endl;
-    std::cout << "Maximum gradient norm " << MaxGradientNorm_ << std::endl;
-}
-
-void App::CalcRelativeLocalGradientNorms() {
-    if (RelLocGradNorms_.size()) {
-        return;
-    }
-    pcl::ScopeTime st("CalcRelativeLocalGradientNorms");
-
-    RelLocGradNorms_.resize(InputNoNan_->size());
-
-    CalcGradientNormsAndCheck();
-    CalcDistanceToNN();
-
-    std::vector<int> indices;
-    std::vector<float> dist2;
-    for (int i = 0; i < InputNoNan_->size(); ++i) {
-        InputOctTree_->radiusSearch(InputNoNan_->at(i), 15 * DistToNN_[i], indices, dist2);
-
-        int less = 0, more = 0;
-        for (int j = 0; j < indices.size(); ++j) {
-            int const idx = indices[j];
-            if (GradientNorms_[idx] < GradientNorms_[i]) {
-                less++;
-            } else {
-                more++;
-            }
-        }
-
-        RelLocGradNorms_[i] = less / static_cast<float>(less + more);
+    std::cout << "-------------------- STATISTICS" << std::endl;
+    std::cout << "New SVM converged in " << SVM_.Iteration << " iterations" << std::endl;
+    std::cout << Objects_->size() << " input vectors" << std::endl;
+    std::cout << SVM_.SVCount << " support vectors" << std::endl;
+    std::cout << SVM_.TargetFunction << " target function" << std::endl;
+    if (UseGrid_) {
+        Strategy_->PrintStatistics(std::cout);
     }
 }
 

@@ -1,4 +1,4 @@
-set tags=./tags,./TAGS,tags,TAGS,/usr/local/include/opencv2/.tags,/usr/include/pcl-1.7/pcl/.tags
+set tags=./tags,./TAGS,tags,TAGS,/usr/local/include/opencv2/.tags,/usr/include/pcl-1.7/pcl/.tags,.tags
 set path=.,/usr/include,,/usr/local/include,/usr/local/include/opencv2,/usr/include/pcl-1.7
 
 let g:make_command='make -j4 VERBOSE=1 '

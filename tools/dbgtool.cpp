@@ -2,6 +2,8 @@
 #include "components/trainset.h"
 #include "components/searcher.h"
 
+#include "utilities/prettyprint.hpp"
+
 #include <iostream>
 
 void testDecisionFunction() {
@@ -20,18 +22,26 @@ void testDecisionFunction() {
 }
 
 void testTrainSetGenerator() {
-    PointCloud cloud;
-    cloud.push_back(createPoint<PointType>(1, 1, 1));
-    cloud.push_back(createPoint<PointType>(1, -1, 1));
-    cloud.push_back(createPoint<PointType>(-1, 1, 1));
-    cloud.push_back(createPoint<PointType>(-1, -1, 1));
+    PointCloud pc;
+    std::vector<PointType> ps {
+        createPoint<PointType>(-1, 0, 1),
+        createPoint<PointType>(0, 0, 1),
+        createPoint<PointType>(1, 0, 1),
+        createPoint<PointType>(-1, -1, 1),
+        createPoint<PointType>(0, -1, 1),
+        createPoint<PointType>(1, -1, 1)
+    };
+    pc.insert(pc.begin(), ps.begin(), ps.end());
+    pc.height = 2;
+    pc.width = 3;
 
-    //TrainingSetGenerator tst(sqrt(3), 3, 0.5);
-    //cv::Mat objects;
-    //cv::Mat responses;
-    //tst.generate(cloud, &objects, &responses);
-    //std::cout << "OBJECTS\n" << objects << std::endl;
-    //std::cout << "RESPONSES\n" << responses << std::endl;
+    TrainingSetGenerator tg(2, 1.0);
+    tg.Generate(pc, std::vector<float>(ps.size(), sqrt(3) / 3));
+
+    std::cout << tg.Objects.points << std::endl;
+    std::cout << tg.Labels << std::endl;
+    std::cout << tg.Grid2Num << std::endl;
+    std::cout << tg.Num2Grid << std::endl;
 }
 
 int main() {

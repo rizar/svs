@@ -170,9 +170,7 @@ bool SVM3D::Iterate() {
 
     int i = Sol_.LowerOutlier();
     int j = Sol_.UpperOutlier();
-    if (Iteration <= 100) {
-        Strategy_->OptimizePivots(&i, &j);
-    }
+    Strategy_->OptimizePivots(&i, &j);
 
     SVMFloat const Qii = 1;
     SVMFloat const Qjj = 1;
@@ -312,18 +310,25 @@ void SVM3D::CalcRho() {
 }
 
 SVMFloat SVM3D::PivotsOptimality(int i, int j) const {
+    return PivotsOptimality(i, j, QValue(i, j));
+}
+
+SVMFloat SVM3D::PivotsOptimality(int i, int j, float Qij) const {
     bool can = (Sol_.Status[i] & LOW_SUPPORT_FLAG) && (Sol_.Status[j] & UP_SUPPORT_FLAG);
     if (! can) {
         return 0.0;
     }
 
-    SVMFloat const ygi = -Labels_[i] * Sol_.Grad[i];
-    SVMFloat const ygj = Labels_[j] * Sol_.Grad[j];
+    SVMFloat const li = Labels_[i];
+    SVMFloat const lj = Labels_[j];
+
+    SVMFloat const ygi = -li * Sol_.Grad[i];
+    SVMFloat const ygj = lj * Sol_.Grad[j];
     SVMFloat const bij = ygi + ygj;
     if (bij <= SVM_EPS) {
         return 0.0;
     }
 
-    SVMFloat const aij = std::max(2 - 2 * KernelValue(i, j), 1e-12);
+    SVMFloat const aij = std::max(2 - 2 * li * lj * Qij , 1e-12);
     return sqr(bij) / aij;
 }

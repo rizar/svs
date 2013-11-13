@@ -1,6 +1,7 @@
 #include "components/common.h"
 #include "components/fastsvm.h"
 #include "components/newsvm.h"
+#include "components/gridstrategy.h"
 
 #include "pcl/common/time.h"
 
@@ -12,168 +13,6 @@
 #include <iostream>
 
 namespace po = boost::program_options;
-
-///////////////////////////////////////////////////////////////////////////////
-
-class GridNeighbourModificationStrategy : public IGradientModificationStrategy {
-public:
-    typedef std::vector< std::vector< std::vector<int> > > Grid2Num;
-    typedef std::vector< std::pair<int, int> > Num2Grid;
-
-public:
-    GridNeighbourModificationStrategy(
-            int gridWidth,
-            int gridHeight,
-            Grid2Num const& grid2num,
-            Num2Grid const& num2grid,
-            float kernelWidth,
-            float kernelThreshold,
-            int cacheSize)
-        : GridWidth_(gridWidth)
-        , GridHeight_(gridHeight)
-        , Grid2Num_(grid2num)
-        , Num2Grid_(num2grid)
-        , MaxTotalNeighbors_(cacheSize / 8)
-        , TotalNeighbours_(0)
-        , HistoryIndex_(0)
-        , NumCacheMisses_(0)
-        , NumOptimizeFailures_(0)
-    {
-        Radius_ = static_cast<int>(ceil(sqrt(-log(kernelThreshold)) * kernelWidth));
-        Radius2_ = sqr(Radius_);
-        std::cerr << "GridStrategy: Radius: " << Radius_ << std::endl;
-    }
-
-    virtual void InitializeFor(SVM3D * parent) {
-        IGradientModificationStrategy::InitializeFor(parent);
-
-        QValues_.resize(parent->PointCount());
-        Neighbors_.resize(parent->PointCount());
-        LastAccess_.resize(parent->PointCount(), -1);
-   }
-
-    virtual void OptimizePivots(int * i, int * j) {
-        float best = Parent()->PivotsOptimality(*i, *j);
-        int const startJ = *j;
-
-        InitializeNeighbors(*i);
-        std::vector<int> const& nbh = Neighbors_[*i];
-
-        for (int k = 0; k < nbh.size(); ++k) {
-            float const current = Parent()->PivotsOptimality(*i, nbh[k]);
-            if (current > best) {
-                best = current;
-                *j = nbh[k];
-            }
-        }
-
-        NumOptimizeFailures_ += startJ == *j;
-    }
-
-    virtual void ReflectAlphaChange(int idx, SVMFloat delta) {
-        InitializeNeighbors(idx);
-        std::vector<int> const& nbh = Neighbors_[idx];
-        std::vector<float> const& qv = QValues_[idx];
-
-        for (int k = 0; k < nbh.size(); ++k) {
-            ModifyGradient(nbh[k], qv[k] * delta);
-        }
-    }
-
-    void PrintStatistics(std::ostream & ostr) const {
-        ostr << "GridStrategy: Number of cache misses: " << NumCacheMisses_ << std::endl;
-        ostr << "GridStrategy: Number of optimization failures: " << NumOptimizeFailures_ << std::endl;
-    }
-
-private:
-    void InitializeNeighbors(int idx) {
-        bool firstTime = LastAccess_[idx] == -1;
-        LogAccess(idx);
-
-        std::vector<int> & nbh = Neighbors_[idx];
-        std::vector<float> & qvls = QValues_[idx];
-
-        if (nbh.size()) {
-            return;
-        }
-        if (! firstTime) {
-            NumCacheMisses_++;
-        }
-
-        int const x = Num2Grid_[idx].first;
-        int const y = Num2Grid_[idx].second;
-
-        for (int i = -std::min(Radius_, x); i <= std::min(GridWidth_ - 1 - x, Radius_); ++i) {
-            for (int j = -std::min(Radius_, y); j <= std::min(GridHeight_ - 1 - y, Radius_); ++j) {
-                std::vector<int> const& els = Grid2Num_[x + i][y + j];
-                for (int k = 0; k < els.size(); ++k) {
-                    int const nbhIdx = els[k];
-
-                    float const dist2 = Parent()->Dist2(idx, nbhIdx);
-                    if (dist2 <= Radius2_) {
-                        nbh.push_back(nbhIdx);
-                        qvls.push_back(Parent()->QValue(idx, nbhIdx, dist2));
-                    }
-                }
-            }
-        }
-
-        RepackNeighbors(idx);
-        RegisterNewNeighbors(nbh.size());
-    }
-
-    void LogAccess(int idx) {
-        History_.push_back(idx);
-        LastAccess_[idx] = History_.size() - 1;
-    }
-
-    void RegisterNewNeighbors(int num) {
-        TotalNeighbours_ += num;
-        while (TotalNeighbours_ > MaxTotalNeighbors_) {
-            int const pointIdx = History_[HistoryIndex_];
-            if (LastAccess_[pointIdx] == HistoryIndex_) {
-                TotalNeighbours_ -= Neighbors_[pointIdx].size();
-                FreeNeighbors(pointIdx);
-            }
-            HistoryIndex_++;
-        }
-    }
-
-    void RepackNeighbors(int idx) {
-        std::vector<int> tmpInts(Neighbors_[idx]);
-        std::vector<float> tmpFloats(QValues_[idx]);
-        Neighbors_[idx].swap(tmpInts);
-        QValues_[idx].swap(tmpFloats);
-    }
-
-    void FreeNeighbors(int idx) {
-        std::vector<int> tmpInts;
-        std::vector<float> tmpFloats;
-        Neighbors_[idx].swap(tmpInts);
-        QValues_[idx].swap(tmpFloats);
-    }
-
-private:
-    int GridWidth_;
-    int GridHeight_;
-    int Radius_;
-    int Radius2_;
-
-    Grid2Num const& Grid2Num_;
-    Num2Grid const& Num2Grid_;
-
-    int MaxTotalNeighbors_;
-    int TotalNeighbours_;
-    int HistoryIndex_;
-    std::vector<int> History_;
-    std::vector<int> LastAccess_;
-
-    std::vector< std::vector<int> > Neighbors_;
-    std::vector< std::vector<float> > QValues_;
-
-    int NumCacheMisses_;
-    int NumOptimizeFailures_;
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -291,7 +130,7 @@ void App::RunNew() {
             new GridNeighbourModificationStrategy(
                 GridSize_, GridSize_,
                 grid2num, num2grid,
-                KernelWidth_, KernelThreshold_,
+                KernelWidth_, KernelThreshold_, 1,
                 1 << 30);
     std::shared_ptr<IGradientModificationStrategy> strPtr(strategy);
     NewSVM_.SetStrategy(strPtr);
