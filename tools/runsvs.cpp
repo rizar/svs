@@ -158,9 +158,9 @@ int App::Run() {
     Load();
     PrintParameters();
     GenerateTrainingSet();
-    //Learn();
+    Learn();
     LearnOld();
-    //PrintStatistics();
+    PrintStatistics();
 
     if (OutputPath_.size()) {
         std::ofstream ofstr(OutputPath_);

@@ -24,7 +24,7 @@ public:
         , MaxTotalNeighbors_(cacheSize / 8)
     {
         Radius_ = static_cast<int>(ceil(sqrt(-log(kernelThreshold)) * kernelWidth));
-        Radius2Scaled_ = sqr(Radius_ * resolution);
+        Radius2Scaled_ = -log(kernelThreshold) * sqr(resolution * kernelWidth);
     }
 
     virtual void InitializeFor(SVM3D * parent);
