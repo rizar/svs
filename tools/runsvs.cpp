@@ -48,6 +48,7 @@ private:
     void PrintStatistics();
     void PrintReport();
     void PrintGradientNorms();
+    void ExportForLibSVM();
 
     void ShowFeaturePoints();
     void ShowGradientMap();
@@ -78,11 +79,14 @@ private:
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
     std::string SaveScreenshotPath_;
+    std::string LibSVMExportPath_;
 
     std::string CameraDescription_;
 
     std::string OutputPath_;
 
+    cv::Mat Objects_;
+    cv::Mat Responses_;
 
     FastSVM SVM_;
     FeaturePointSearcher Searcher_;
@@ -115,7 +119,8 @@ void App::ParseArgs(int argc, char* argv []) {
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
-        ("savesc", po::value<std::string>(&SaveScreenshotPath_));
+        ("savesc", po::value<std::string>(&SaveScreenshotPath_))
+        ("libsvm", po::value<std::string>(&LibSVMExportPath_));
 
     po::positional_options_description pos;
     pos.add("input-path", 1);
@@ -165,6 +170,9 @@ int App::Run() {
         std::ofstream ofstr(OutputPath_);
         SupportVectorShape(Searcher_.FeaturePoints).SaveAsText(ofstr);
     }
+    if (LibSVMExportPath_.size()) {
+        ExportForLibSVM();
+    }
 
     PrintStatistics();
     return 0;
@@ -174,16 +182,14 @@ void App::Learn() {
     CalcDistanceToNN();
 
     TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
-    cv::Mat objects;
-    cv::Mat responses;
-    tsg.generate(*InputNoNan_, DistToNN_, &objects, &responses);
+    tsg.generate(*InputNoNan_, DistToNN_, &Objects_, &Responses_);
 
     BaseSVMParams svmParams;
     SetSVMParams(&svmParams);
 
     {
         pcl::ScopeTime st("SVM");
-        SVM_.train(objects, responses, svmParams);
+        SVM_.train(Objects_, Responses_, svmParams);
     }
 }
 
@@ -214,6 +220,16 @@ void App::SetSVMParams(BaseSVMParams * params) {
 #ifdef USE_MY_SVM
     My::kernelThreshold = KernelThreshold_;
 #endif
+}
+
+void App::ExportForLibSVM() {
+    std::ofstream ofstr(LibSVMExportPath_);
+    for (int i = 0; i < Objects_.rows; ++i) {
+        ofstr << Responses_.at<float>(i) << ' '
+            << "1:" << Objects_.at<float>(i, 0) << ' '
+            << "2:" << Objects_.at<float>(i, 1) << ' '
+            << "3:" << Objects_.at<float>(i, 2) << '\n';
+    }
 }
 
 void App::PrintParameters() {
