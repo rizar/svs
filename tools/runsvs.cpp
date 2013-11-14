@@ -45,7 +45,9 @@ public:
     int Run();
 
 private:
+    void GenerateTrainingSet();
     void Learn();
+    void LearnOld();
     void Search();
 
     void PrintParameters();
@@ -77,6 +79,7 @@ private:
     bool DoShowFP_;
     bool DoShowGradientMap_;
     bool DoShowRelLocGradMap_;
+    bool DoLearnOld_ = false;
     bool SaveScreenshot_;
     bool UseGrid_ = true;
 
@@ -93,6 +96,7 @@ private:
     GridNeighbourModificationStrategy::Grid2Num Grid2Num_;
     GridNeighbourModificationStrategy::Num2Grid Num2Grid_;
     std::shared_ptr<GridNeighbourModificationStrategy> Strategy_;
+    FastSVM OldSVM_;
     SVM3D SVM_;
     FeaturePointSearcher Searcher_;
     ModelChecker Checker_;
@@ -120,6 +124,7 @@ void App::ParseArgs(int argc, char* argv []) {
         ("showgm", po::value<bool>(&DoShowGradientMap_)->zero_tokens())
         ("showrlgm", po::value<bool>(&DoShowRelLocGradMap_)->zero_tokens())
         ("usegrid", po::value<bool>(&UseGrid_))
+        ("learnold", po::value<bool>(&DoLearnOld_)->zero_tokens())
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
@@ -152,8 +157,10 @@ int App::Run() {
 
     Load();
     PrintParameters();
-    Learn();
-    PrintStatistics();
+    GenerateTrainingSet();
+    //Learn();
+    LearnOld();
+    //PrintStatistics();
 
     if (OutputPath_.size()) {
         std::ofstream ofstr(OutputPath_);
@@ -165,7 +172,7 @@ int App::Run() {
     return 0;
 }
 
-void App::Learn() {
+void App::GenerateTrainingSet() {
     CalcDistanceToNN();
 
     TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
@@ -175,6 +182,9 @@ void App::Learn() {
     Labels_ = tsg.Labels;
     Num2Grid_ = tsg.Num2Grid;
     Grid2Num_ = tsg.Grid2Num;
+}
+
+void App::Learn() {
     if (UseGrid_) {
         Strategy_.reset(new GridNeighbourModificationStrategy(
                     Input_->height, Input_->width,
@@ -188,6 +198,23 @@ void App::Learn() {
     {
         pcl::ScopeTime st("SVM");
         SVM_.Train(*Objects_, Labels_);
+    }
+}
+
+void App::LearnOld() {
+    if (! DoLearnOld_) {
+        return;
+    }
+
+    BaseSVMParams params;
+    params.C = MaxAlpha_;
+    params.gamma = 1 / sqr(KernelWidth_ * Resolution_);
+    params.term_crit.type = CV_TERMCRIT_EPS;
+    params.term_crit.epsilon = TerminateEps_;
+    My::kernelThreshold = KernelThreshold_;
+    {
+        pcl::ScopeTime st("Old SVM");
+        OldSVM_.train(*Objects_, Labels_, params);
     }
 }
 
