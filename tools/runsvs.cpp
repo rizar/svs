@@ -13,6 +13,9 @@
 #include "pcl/common/time.h"
 #include "pcl/common/distances.h"
 
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
 #include "boost/program_options.hpp"
 
 #include <iostream>
@@ -56,6 +59,7 @@ private:
     void PrintGradientNorms();
 
     void ExportForLibSVM();
+    void ExportAlphaMap();
 
     void ShowFeaturePoints();
     void ShowGradientMap();
@@ -90,6 +94,7 @@ private:
     std::string SaveScreenshotPath_;
     std::string OutputPath_;
     std::string LibSVMExportPath_;
+    std::string AlphaMapPath_;
 
     PointCloud::Ptr Objects_;
     std::vector<float> Labels_;
@@ -131,7 +136,8 @@ void App::ParseArgs(int argc, char* argv []) {
         ("savesc", po::value<std::string>(&SaveScreenshotPath_))
         ("input-path", po::value<std::string>(&InputPath_))
         ("output-path", po::value<std::string>(&OutputPath_))
-        ("libsvm", po::value<std::string>(&LibSVMExportPath_));
+        ("libsvm", po::value<std::string>(&LibSVMExportPath_))
+        ("alphamap", po::value<std::string>(&AlphaMapPath_));
 
     po::positional_options_description pos;
     pos.add("input-path", 1);
@@ -167,6 +173,7 @@ int App::Run() {
         SupportVectorShape(Searcher_.FeaturePoints).SaveAsText(ofstr);
     }
 
+    ExportAlphaMap();
     ExportForLibSVM();
 
     return 0;
@@ -226,6 +233,29 @@ void App::ExportForLibSVM() {
               << "2:" << Objects_->at(i).y << ' '
               << "3:" << Objects_->at(i).z << '\n';
     }
+}
+
+void App::ExportAlphaMap() {
+    if (AlphaMapPath_.empty()) {
+        return;
+    }
+
+    // works only for non-randomly generated training set
+    cv::Mat image(Input_->height, Input_->width, CV_8UC3);
+    for (int i = 0; i < Input_->height; ++i) {
+        for (int j = 0; j < Input_->width; ++j) {
+            std::vector<int> const& nums = Grid2Num_[i][j];
+            if (nums.empty()) {
+                image.at<cv::Vec3b>(i, j) = cv::Vec3b(0, 0, 0);
+                continue;
+            }
+
+            float const relAlpha = SVM_.Alphas()[nums[0]] / MaxAlpha_;
+            image.at<cv::Vec3b>(i, j) = cv::Vec3b(255 * (1 - relAlpha), 0, 255 * relAlpha);
+        }
+    }
+
+    imwrite(AlphaMapPath_, image);
 }
 
 void App::PrintParameters() {
