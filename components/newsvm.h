@@ -112,11 +112,6 @@ class SVM3D {
 
 public:
     SVM3D()
-        : Iteration(0)
-        , C_(1)
-        , Gamma_(1)
-        , MinusGamma_(-Gamma_)
-        , Eps_(1e-3)
     {
         Strategy_.reset(new DefaultGradientModificationStrategy);
     }
@@ -136,6 +131,9 @@ public:
         Eps_ = eps;
     }
 
+    void Init(PointCloud const& points, std::vector<float> const& labels,
+            std::istream & istr);
+    void SaveAlphas(std::ostream & ostr);
     void Train(PointCloud const& points, std::vector<float> const& labels);
 
     SVMFloat const* Alphas() {
@@ -188,15 +186,15 @@ private:
     void CalcTargetFunction();
 
 public:
-    int Iteration;
-    int SVCount;
-    float TargetFunction;
+    int Iteration = 0;
+    int SVCount = 0;
+    float TargetFunction = 0.0;
 
 private:
-    SVMFloat C_;
-    SVMFloat Gamma_;
-    SVMFloat MinusGamma_;
-    SVMFloat Eps_;
+    SVMFloat C_ = 1;
+    SVMFloat Gamma_ = 1;
+    SVMFloat MinusGamma_ = -1;
+    SVMFloat Eps_ = 1e-3;
 
     int N_;
     PointType const* Points_;

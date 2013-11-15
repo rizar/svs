@@ -11,7 +11,7 @@
 #include "utilities/prettyprint.hpp"
 
 #include "pcl/common/time.h"
-#include "pcl/common/distances.h"
+#include "pcl/features/integral_image_normal.h"
 
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -26,19 +26,6 @@ namespace po = boost::program_options;
 class App : public BaseApp {
 public:
     App(int argc, char* argv [])
-        : Seed_(1)
-        , MaxAlpha_(32)
-        , KernelWidth_(5)
-        , KernelThreshold_(1e-5)
-        , TerminateEps_(1e-2)
-        , BorderWidth_(1)
-        , TakeProb_(1.0)
-        , NumFP_(10)
-        , DoCheck_(false)
-        , DoShowFP_(false)
-        , DoShowGradientMap_(false)
-        , DoShowRelLocGradMap_(false)
-        , SaveScreenshot_(false)
     {
         ParseArgs(argc, argv);
     }
@@ -61,34 +48,48 @@ private:
     void ExportForLibSVM();
     void ExportAlphaMap();
 
+    void Visualize();
     void ShowFeaturePoints();
     void ShowGradientMap();
     void ShowRelativeLocalGradientMap();
 
+    void CalcNormals();
     void CalcGradientNormsAndCheck();
     void CalcRelativeLocalGradientNorms();
 
 private:
-    int Seed_;
+    int Seed_ = 1;
 
-    float MaxAlpha_;
-    float KernelWidth_;
-    float KernelThreshold_;
-    float TerminateEps_;
-    int BorderWidth_;
-    float TakeProb_;
-    int NumFP_;
+// algorithm params
+    float MaxAlpha_ = 32;
+    float KernelWidth_ = 5;
+    float KernelThreshold_ = 1e-3;
+    float TerminateEps_ = 1e-2;
+    int BorderWidth_ = 1;
+    float TakeProb_ = 1.0;
+    int NumFP_ = 100;
 
-    bool DoCheck_;
-    bool DoShowFP_;
-    bool DoShowGradientMap_;
-    bool DoShowRelLocGradMap_;
+// visualization flags
+    bool DoVisualize_ = false;
+    bool DoShowNormals_ = false;
+    bool DoShowFP_ = false;
+    bool DoShowGradientMap_ = false;
+    bool DoShowRelLocGradMap_ = false;
+
+// other flags
+    bool DoCheck_ = false;
     bool DoLearnOld_ = false;
-    bool SaveScreenshot_;
+    bool SaveScreenshot_ = false;
     bool UseGrid_ = true;
+    bool UseNormals_ = false;
 
+// visualization parameters
     std::string CameraDescription_;
 
+// source pathes
+    std::string AlphasPath_;
+
+// destination pathes
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
     std::string SaveScreenshotPath_;
@@ -96,15 +97,20 @@ private:
     std::string LibSVMExportPath_;
     std::string AlphaMapPath_;
 
+// SVM related data
     PointCloud::Ptr Objects_;
     std::vector<float> Labels_;
     GridNeighbourModificationStrategy::Grid2Num Grid2Num_;
     GridNeighbourModificationStrategy::Num2Grid Num2Grid_;
+    std::vector<int> Pixel2Num_;
     std::shared_ptr<GridNeighbourModificationStrategy> Strategy_;
     FastSVM OldSVM_;
     SVM3D SVM_;
     FeaturePointSearcher Searcher_;
     ModelChecker Checker_;
+
+// useful data
+    NormalCloud::Ptr Normals_;
 
     float MinGradientNorm_;
     float MaxGradientNorm_;
@@ -116,7 +122,9 @@ void App::ParseArgs(int argc, char* argv []) {
     po::options_description desc;
     desc.add_options()
         ("help", "show help")
+
         ("seed", po::value<int>(&Seed_))
+
         ("tprob", po::value<float>(&TakeProb_))
         ("bwidth", po::value<int>(&BorderWidth_))
         ("malpha", po::value<float>(&MaxAlpha_))
@@ -124,24 +132,31 @@ void App::ParseArgs(int argc, char* argv []) {
         ("kthr", po::value<float>(&KernelThreshold_))
         ("teps", po::value<float>(&TerminateEps_))
         ("numfp", po::value<int>(&NumFP_))
+
         ("docheck", po::value<bool>(&DoCheck_)->zero_tokens())
+        ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
+        ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
         ("showfp", po::value<bool>(&DoShowFP_)->zero_tokens())
         ("showgm", po::value<bool>(&DoShowGradientMap_)->zero_tokens())
         ("showrlgm", po::value<bool>(&DoShowRelLocGradMap_)->zero_tokens())
+
         ("usegrid", po::value<bool>(&UseGrid_))
+        ("usenr", po::value<bool>(&UseNormals_)->zero_tokens())
         ("learnold", po::value<bool>(&DoLearnOld_)->zero_tokens())
+
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
         ("savesc", po::value<std::string>(&SaveScreenshotPath_))
-        ("input-path", po::value<std::string>(&InputPath_))
-        ("output-path", po::value<std::string>(&OutputPath_))
+        ("input", po::value<std::string>(&InputPath_))
+        ("alphas", po::value<std::string>(&AlphasPath_))
+        ("output", po::value<std::string>(&OutputPath_))
         ("libsvm", po::value<std::string>(&LibSVMExportPath_))
         ("alphamap", po::value<std::string>(&AlphaMapPath_));
 
     po::positional_options_description pos;
-    pos.add("input-path", 1);
-    pos.add("output-path", 2);
+    pos.add("input", 1);
+    pos.add("output", 2);
 
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv)
@@ -176,6 +191,7 @@ int App::Run() {
     ExportAlphaMap();
     ExportForLibSVM();
 
+    Visualize();
     return 0;
 }
 
@@ -183,12 +199,18 @@ void App::GenerateTrainingSet() {
     CalcDistanceToNN();
 
     TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
-    tsg.Generate(*Input_, DistToNN_);
+    if (UseNormals_) {
+        CalcNormals();
+        tsg.GenerateUsingNormals(*Input_, *Normals_, DistToNN_);
+    } else {
+        tsg.GenerateFromSensor(*Input_, DistToNN_);
+    }
 
     Objects_.reset(new PointCloud(tsg.Objects));
     Labels_ = tsg.Labels;
     Num2Grid_ = tsg.Num2Grid;
     Grid2Num_ = tsg.Grid2Num;
+    Pixel2Num_ = tsg.Pixel2Num;
 }
 
 void App::Learn() {
@@ -202,9 +224,18 @@ void App::Learn() {
     }
     SVM_.SetParams(MaxAlpha_, 1 / sqr(KernelWidth_ * Resolution_), TerminateEps_);
 
-    {
+    std::ifstream alphaStr(AlphasPath_.c_str());
+    if (alphaStr.good()) {
+        SVM_.Init(*Objects_, Labels_, alphaStr);
+    } else {
         pcl::ScopeTime st("SVM");
         SVM_.Train(*Objects_, Labels_);
+
+        alphaStr.close();
+        if (AlphasPath_.size()) {
+            std::ofstream writeAlphaStr(AlphasPath_.c_str());
+            SVM_.SaveAlphas(writeAlphaStr);
+        }
     }
 }
 
@@ -223,6 +254,44 @@ void App::LearnOld() {
         pcl::ScopeTime st("Old SVM");
         OldSVM_.train(*Objects_, Labels_, params);
     }
+}
+
+void App::CalcNormals() {
+    if (Normals_.get()) {
+        return;
+    }
+    Normals_.reset(new NormalCloud);
+
+    pcl::IntegralImageNormalEstimation<PointType, NormalType> ne;
+    ne.setNormalSmoothingSize(5.0f);
+    ne.setInputCloud(Input_);
+    ne.compute(*Normals_);
+}
+
+void App::Visualize() {
+    if (! DoVisualize_) {
+        return;
+    }
+    TUMDataSetVisualizer viewer(CameraDescription_);
+    viewer.EasyAdd(Input_, "input", [this] (int i) {
+            return Color(Input_->at(i));
+            });
+    if (DoShowNormals_) {
+        CalcNormals();
+        viewer.addPointCloudNormals<PointType, NormalType>(Input_, Normals_);
+        viewer.EasyAdd(Input_, "input", [this] (int i) {
+                    return pcl_isnan(Normals_->at(i).normal_x) ? Color({0, 0, 255}) : Color({255, 0, 0});
+                });
+    }
+    viewer.EasyAdd(Input_, "input", [this] (int i) {
+                int num = Pixel2Num_[i];
+                if (num == -1) {
+                    return Color();
+                }
+                float alpha = SVM_.Alphas()[num];
+                return Color({static_cast<int>(alpha * 255), 0, static_cast<int>((1 - alpha) * 255)});
+            });
+    viewer.Run(SaveScreenshotPath_);
 }
 
 void App::ExportForLibSVM() {

@@ -2,6 +2,82 @@
 
 #include "pcl/visualization/pcl_visualizer.h"
 
+#include <functional>
+
+struct Color {
+    int r = 0;
+    int g = 0;
+    int b = 0;
+
+    Color() {
+    }
+
+    Color(PointType const& point)
+        : r(point.r)
+        , g(point.g)
+        , b(point.b)
+    {
+    }
+
+    Color(std::initializer_list<int> const& list) {
+        auto it = list.begin();
+        r = *(it++);
+        g = *(it++);
+        b = *it;
+    }
+};
+
+typedef std::function<Color (int)> ColorMap;
+
+class PointCloudLambdaColorHandler : public pcl::visualization::PCLVisualizer::ColorHandler {
+    typedef pcl::visualization::PCLVisualizer::ColorHandler Base;
+
+public:
+    PointCloudLambdaColorHandler(::PointCloud::ConstPtr cloud, ColorMap colorMap)
+        : Base(pcl::PCLPointCloud2::ConstPtr())
+        , Cloud_(cloud)
+        , ColorMap_(colorMap)
+    {
+        capable_ = true;
+    }
+
+    virtual std::string
+    getName () const { return ("PointCloudLambdaColorHandler"); }
+
+    virtual std::string
+    getFieldName () const { return ("[lambda]"); }
+
+    virtual bool getColor (vtkSmartPointer<vtkDataArray> &scalars) const
+    {
+        if (!scalars)
+            scalars = vtkSmartPointer<vtkUnsignedCharArray>::New ();
+        scalars->SetNumberOfComponents (3);
+
+        vtkIdType nr_points = Cloud_->points.size();
+        reinterpret_cast<vtkUnsignedCharArray*>(&(*scalars))->SetNumberOfTuples (nr_points);
+        unsigned char* colors = reinterpret_cast<vtkUnsignedCharArray*>(&(*scalars))->GetPointer (0);
+
+        int j = 0;
+        for (vtkIdType cp = 0; cp < nr_points; ++cp)
+        {
+            if (pcl_isnan(Cloud_->at(cp).x)) {
+                continue;
+            }
+            Color col = ColorMap_(cp);
+
+            colors[j * 3 + 0] = static_cast<unsigned char> (col.r);
+            colors[j * 3 + 1] = static_cast<unsigned char> (col.g);
+            colors[j * 3 + 2] = static_cast<unsigned char> (col.b);
+            j++;
+        }
+        return (true);
+    }
+
+private:
+    ::PointCloud::ConstPtr Cloud_;
+    ColorMap ColorMap_;
+};
+
 class TUMDataSetVisualizer : public pcl::visualization::PCLVisualizer {
 public:
     TUMDataSetVisualizer(std::string const& cam = "")
@@ -10,16 +86,8 @@ public:
     }
 
 public:
-    void EasyAdd(PointCloud::Ptr cloud, std::string const& name, int size = 1) {
-        pcl::visualization::PointCloudColorHandlerRGBField<PointType> ch(cloud);
-        addPointCloud<PointType>(cloud, ch, name.c_str());
-        setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, size, name.c_str());
-    }
-
-    void EasyAdd(PointCloud::Ptr cloud, std::string const& name, int r, int g, int b, int size = 1) {
-        pcl::visualization::PointCloudColorHandlerCustom<PointType> ch(cloud, r, g, b);
-        addPointCloud<PointType>(cloud, ch, name.c_str());
-        setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, size, name.c_str());
+    void EasyAdd(PointCloud::Ptr cloud, std::string const& name, ColorMap const& colorMap) {
+        addPointCloud<PointType>(cloud, ColorHandlerConstPtr(new PointCloudLambdaColorHandler(cloud, colorMap)), name);
     }
 
     void Run(std::string const& screenshotPath) {

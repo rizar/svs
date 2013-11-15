@@ -141,6 +141,28 @@ void PrecomputedGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFlo
     }
 }
 
+void SVM3D::Init(PointCloud const& points, std::vector<float> const& labels,
+        std::istream & istr)
+{
+    assert(points.size() == labels.size());
+    N_ = points.size();
+    Points_ = &points[0];
+    Labels_ = &labels[0];
+    Sol_.Init(N_, C_, Labels_);
+    for (int i = 0; i < N_; ++i) {
+        istr >> Sol_.Alphas[i];
+        if (Sol_.Alphas[i] > 0) {
+            SVCount++;
+        }
+    }
+}
+
+void SVM3D::SaveAlphas(std::ostream & ostr) {
+    for (int i = 0; i < N_; ++i) {
+        ostr << Sol_.Alphas[i] << '\n';
+    }
+}
+
 void SVM3D::Train(PointCloud const& points, std::vector<float> const& labels) {
     assert(points.size() == labels.size());
     N_ = points.size();

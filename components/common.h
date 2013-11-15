@@ -4,8 +4,9 @@
 #include "pcl/point_types.h"
 
 typedef pcl::PointXYZRGB PointType;
+typedef pcl::Normal NormalType;
 typedef pcl::PointCloud<PointType> PointCloud;
-typedef pcl::PointCloud<pcl::Normal> NormalCloud;
+typedef pcl::PointCloud<NormalType> NormalCloud;
 
 inline float sqr(float x) {
     return x * x;
