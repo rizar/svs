@@ -117,6 +117,10 @@ void IGradientModificationStrategy::FinishIteration() {
     }
 }
 
+float IGradientModificationStrategy::QValue(int i, int j) {
+    return Parent()->QValue(i, j);
+}
+
 void DefaultGradientModificationStrategy::ReflectAlphaChange(int idx, SVMFloat deltaAlpha) {
     for (int k = 0; k < Parent()->PointCount(); ++k) {
         ModifyGradient(k, Parent()->QValue(idx, k) * deltaAlpha);
@@ -187,6 +191,17 @@ bool SVM3D::Iterate() {
     if (Sol_.LowerValue() - Sol_.UpperValue() < Eps_) {
         return false;
     }
+    if (Iteration % 10000 == 0) {
+        CalcTargetFunction();
+        //std::cout << "TF: " << TargetFunction << std::endl;
+    }
+    if (Iteration % 1 == 0) {
+        SegmentInfo si = Sol_.Segs_[1];
+        assert(si.Low == -Labels_[si.LowIdx] * Sol_.Grad[si.LowIdx]);
+        assert(si.Up == -Labels_[si.UpIdx] * Sol_.Grad[si.UpIdx]);
+        //std::cout << si.Low << ' ' << si.LowIdx << ' ' << si.Up << ' ' << si.UpIdx << ' ';
+        //std::cout << "(" << Sol_.Grad[si.LowIdx] << ' ' << Sol_.Grad[si.UpIdx] << ") ";
+    }
 
     Strategy_->StartIteration();
 
@@ -194,9 +209,13 @@ bool SVM3D::Iterate() {
     int j = Sol_.UpperOutlier();
     Strategy_->OptimizePivots(&i, &j);
 
-    SVMFloat const Qii = 1;
-    SVMFloat const Qjj = 1;
-    SVMFloat const Qij = QValue(i, j);
+    if (Iteration == 420070) {
+        std::cerr << "BREAKPOINT\n";
+    }
+
+    float const Qii = 1;
+    float const Qjj = 1;
+    float const Qij = Strategy_->QValue(i, j);
 
     SVMFloat & Gi = Sol_.Grad[i];
     SVMFloat & Gj = Sol_.Grad[j];
@@ -213,6 +232,8 @@ bool SVM3D::Iterate() {
         SVMFloat const diff = Ai - Aj;
         Ai += delta;
         Aj += delta;
+
+        //std::cout << "[" << Qij << ' ' << delta << "] ";
 
         if (diff > 0 && Aj < 0 )
         {
@@ -244,6 +265,8 @@ bool SVM3D::Iterate() {
         Ai -= delta;
         Aj += delta;
 
+        //std::cout << "[" << Qij << ' ' << delta << "] ";
+
         if (sum > C_ && Ai > C_)
         {
             Ai = C_;
@@ -266,6 +289,8 @@ bool SVM3D::Iterate() {
             Aj = sum;
         }
     }
+    assert(0 <= Ai && Ai <= C_);
+    assert(0 <= Aj && Aj <= C_);
 
     Sol_.UpdateStatus(i, Labels_[i], C_);
     Sol_.UpdateStatus(j, Labels_[j], C_);
@@ -275,9 +300,15 @@ bool SVM3D::Iterate() {
 
     SVMFloat const deltaAi = Ai - oldAi;
     SVMFloat const deltaAj = Aj - oldAj;
+    //std::cout << deltaAi << ' ' << deltaAj << '\n';
 
+    SVMFloat const oldGi = Gi;
+    SVMFloat const oldGj = Gj;
     Strategy_->ReflectAlphaChange(i, deltaAi);
     Strategy_->ReflectAlphaChange(j, deltaAj);
+    assert(fabs(Gi - oldGi - Qii * deltaAi - Qij * deltaAj) < 1e-3);
+    assert(fabs(Gj - oldGj - Qij * deltaAi - Qjj * deltaAj) < 1e-3);
+
     Strategy_->FinishIteration();
 
     return true;

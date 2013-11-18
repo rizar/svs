@@ -9,9 +9,11 @@ class TrainingSetGenerator {
 public:
     TrainingSetGenerator(
             float width,
-            float prob)
+            float prob,
+            float step)
         : Width_(width)
         , Prob_(prob)
+        , Step_(step)
     {
     }
 
@@ -41,4 +43,5 @@ private:
 private:
     float Width_;
     float Prob_;
+    float Step_;
 };

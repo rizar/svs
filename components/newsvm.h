@@ -59,7 +59,7 @@ public:
     std::vector<int> Status;
     float Rho;
 
-private:
+public:
     int N_;
     int M_;
 
@@ -80,6 +80,8 @@ public:
     SVM3D * Parent() {
         return Parent_;
     }
+
+    virtual float QValue(int i, int j);
 
 private:
     void StartIteration();

@@ -33,6 +33,8 @@ public:
 
     void PrintStatistics(std::ostream & ostr) const;
 
+    virtual float QValue(int i, int j);
+
 private:
     void InitializeNeighbors(int idx);
     void LogAccess(int idx);

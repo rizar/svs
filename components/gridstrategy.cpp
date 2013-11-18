@@ -114,3 +114,16 @@ void GridNeighbourModificationStrategy::FreeNeighbors(int idx) {
     Neighbors_[idx].swap(tmpInts);
     QValues_[idx].swap(tmpFloats);
 }
+
+float GridNeighbourModificationStrategy::QValue(int i, int j) {
+    // there is no need for a speed here
+    auto cellI = Num2Grid_.at(i);
+    auto cellJ = Num2Grid_.at(j);
+    if (abs(cellI.first - cellJ.first) <= Radius_ &&
+        abs(cellI.second - cellJ.second) <= Radius_ &&
+        Parent()->Dist2(i, j) <= Radius2Scaled_)
+    {
+        return Parent()->QValue(i, j);
+    }
+    return 0.0;
+}

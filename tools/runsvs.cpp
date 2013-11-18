@@ -66,6 +66,7 @@ private:
     float KernelThreshold_ = 1e-3;
     float TerminateEps_ = 1e-2;
     int BorderWidth_ = 1;
+    float StepWidth_ = 1;
     float TakeProb_ = 1.0;
     int NumFP_ = 100;
 
@@ -127,6 +128,7 @@ void App::ParseArgs(int argc, char* argv []) {
 
         ("tprob", po::value<float>(&TakeProb_))
         ("bwidth", po::value<int>(&BorderWidth_))
+        ("stepwidth", po::value<float>(&StepWidth_))
         ("malpha", po::value<float>(&MaxAlpha_))
         ("kwidth", po::value<float>(&KernelWidth_))
         ("kthr", po::value<float>(&KernelThreshold_))
@@ -178,19 +180,20 @@ int App::Run() {
 
     Load();
     PrintParameters();
+
     GenerateTrainingSet();
+    ExportForLibSVM();
+
     Learn();
     LearnOld();
-    PrintStatistics();
+    ExportAlphaMap();
 
     if (OutputPath_.size()) {
         std::ofstream ofstr(OutputPath_);
         SupportVectorShape(Searcher_.FeaturePoints).SaveAsText(ofstr);
     }
 
-    ExportAlphaMap();
-    ExportForLibSVM();
-
+    PrintStatistics();
     Visualize();
     return 0;
 }
@@ -198,7 +201,7 @@ int App::Run() {
 void App::GenerateTrainingSet() {
     CalcDistanceToNN();
 
-    TrainingSetGenerator tsg(BorderWidth_, TakeProb_);
+    TrainingSetGenerator tsg(BorderWidth_, TakeProb_, StepWidth_);
     if (UseNormals_) {
         CalcNormals();
         tsg.GenerateUsingNormals(*Input_, *Normals_, DistToNN_);
@@ -338,6 +341,7 @@ void App::PrintParameters() {
     std::cout << "Max alpha constraint is " << MaxAlpha_ << std::endl;
     std::cout << "Terminate epsilon is " << TerminateEps_ << std::endl;
     std::cout << "Border width is " << BorderWidth_ << std::endl;
+    std::cout << "Step width is " << StepWidth_ << std::endl;
     std::cout << "Take probability is " << TakeProb_ << std::endl;
     std::cout << "Number of feature points is " << NumFP_ << std::endl;
 }

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
 project(svs)
 
+set(CMAKE_CXX_COMPILER g++-4.8)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 include(cotire)
 
