@@ -1,6 +1,7 @@
 #include "components/fastsvm.h"
 #include "components/trainset.h"
 #include "components/searcher.h"
+#include <components/griditer.h>
 
 #include "utilities/prettyprint.hpp"
 
@@ -35,8 +36,8 @@ void testTrainSetGenerator() {
     pc.height = 2;
     pc.width = 3;
 
-    TrainingSetGenerator tg(2, 1.0);
-    tg.Generate(pc, std::vector<float>(ps.size(), sqrt(3) / 3));
+    TrainingSetGenerator tg(2, 1.0, 1.0);
+    tg.GenerateFromSensor(pc, std::vector<float>(ps.size(), sqrt(3) / 3));
 
     std::cout << tg.Objects.points << std::endl;
     std::cout << tg.Labels << std::endl;
@@ -44,7 +45,20 @@ void testTrainSetGenerator() {
     std::cout << tg.Num2Grid << std::endl;
 }
 
+void testGridRadiusTraversal() {
+    GridRadiusTraversal grt(10, 10);
+
+    grt.TraverseCircle(3, 3, 3, [] (int x, int y) {
+                std::cout << x << " " << y << ' ';
+                std::cout << sqr(x - 3) + sqr(y - 3) << '\n';
+            });
+    grt.TraverseCircle(1, 2, 3, [] (int x, int y) {
+                std::cout << x << " " << y << ' ';
+                std::cout << sqr(x - 1) + sqr(y - 2) << '\n';
+            });
+}
+
 int main() {
-    testTrainSetGenerator();
+    testGridRadiusTraversal();
     return 0;
 }

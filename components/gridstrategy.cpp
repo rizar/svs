@@ -1,4 +1,5 @@
 #include "gridstrategy.h"
+#include "griditer.h"
 
 void GridNeighbourModificationStrategy::InitializeFor(SVM3D * parent) {
     IGradientModificationStrategy::InitializeFor(parent);
@@ -47,7 +48,7 @@ void GridNeighbourModificationStrategy::PrintStatistics(std::ostream & ostr) con
 }
 
 void GridNeighbourModificationStrategy::InitializeNeighbors(int idx) {
-    bool firstTime = LastAccess_[idx] == -1;
+    bool const firstTime = LastAccess_[idx] == -1;
     LogAccess(idx);
 
     std::vector<int> & nbh = Neighbors_[idx];
@@ -63,9 +64,9 @@ void GridNeighbourModificationStrategy::InitializeNeighbors(int idx) {
     int const y = Num2Grid_[idx].first;
     int const x = Num2Grid_[idx].second;
 
-    for (int j = -std::min(Radius_, y); j <= std::min(GridHeight_ - 1 - y, Radius_); ++j) {
-        for (int i = -std::min(Radius_, x); i <= std::min(GridWidth_ - 1 - x, Radius_); ++i) {
-            std::vector<int> const& els = Grid2Num_[y + j][x + i];
+    GridRadiusTraversal grt(GridHeight_, GridWidth_);
+    auto processGrid = [this, &idx, &nbh, &qvls] (int j, int i) {
+            std::vector<int> const& els = Grid2Num_[j][i];
             for (int k = 0; k < els.size(); ++k) {
                 int const nbhIdx = els[k];
 
@@ -75,8 +76,8 @@ void GridNeighbourModificationStrategy::InitializeNeighbors(int idx) {
                     qvls.push_back(Parent()->QValue(idx, nbhIdx, dist2));
                 }
             }
-        }
-    }
+    };
+    grt.TraverseRectangle<decltype(processGrid)>(y, x, Radius_, processGrid);
 
     NumNeighborsCalculations_++;
     TotalNeighborsProcessed_ += nbh.size();
