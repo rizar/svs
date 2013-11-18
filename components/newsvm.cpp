@@ -191,27 +191,12 @@ bool SVM3D::Iterate() {
     if (Sol_.LowerValue() - Sol_.UpperValue() < Eps_) {
         return false;
     }
-    if (Iteration % 10000 == 0) {
-        CalcTargetFunction();
-        //std::cout << "TF: " << TargetFunction << std::endl;
-    }
-    if (Iteration % 1 == 0) {
-        SegmentInfo si = Sol_.Segs_[1];
-        assert(si.Low == -Labels_[si.LowIdx] * Sol_.Grad[si.LowIdx]);
-        assert(si.Up == -Labels_[si.UpIdx] * Sol_.Grad[si.UpIdx]);
-        //std::cout << si.Low << ' ' << si.LowIdx << ' ' << si.Up << ' ' << si.UpIdx << ' ';
-        //std::cout << "(" << Sol_.Grad[si.LowIdx] << ' ' << Sol_.Grad[si.UpIdx] << ") ";
-    }
 
     Strategy_->StartIteration();
 
     int i = Sol_.LowerOutlier();
     int j = Sol_.UpperOutlier();
     Strategy_->OptimizePivots(&i, &j);
-
-    if (Iteration == 420070) {
-        std::cerr << "BREAKPOINT\n";
-    }
 
     float const Qii = 1;
     float const Qjj = 1;
@@ -232,8 +217,6 @@ bool SVM3D::Iterate() {
         SVMFloat const diff = Ai - Aj;
         Ai += delta;
         Aj += delta;
-
-        //std::cout << "[" << Qij << ' ' << delta << "] ";
 
         if (diff > 0 && Aj < 0 )
         {
@@ -264,8 +247,6 @@ bool SVM3D::Iterate() {
         SVMFloat const sum = Ai + Aj;
         Ai -= delta;
         Aj += delta;
-
-        //std::cout << "[" << Qij << ' ' << delta << "] ";
 
         if (sum > C_ && Ai > C_)
         {
@@ -300,7 +281,6 @@ bool SVM3D::Iterate() {
 
     SVMFloat const deltaAi = Ai - oldAi;
     SVMFloat const deltaAj = Aj - oldAj;
-    //std::cout << deltaAi << ' ' << deltaAj << '\n';
 
     SVMFloat const oldGi = Gi;
     SVMFloat const oldGj = Gj;
