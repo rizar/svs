@@ -23,6 +23,7 @@ void GridNeighbourModificationStrategy::OptimizePivots(int * i, int * j) {
             *j = nbh[k];
         }
     }
+    assert(*j!= *i && 0 <= *j && *j < Num2Grid_.size());
 
     NumOptimizeFailures_ += startJ == *j;
 }
