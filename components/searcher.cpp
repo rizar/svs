@@ -28,7 +28,7 @@ PointType FeaturePointSearcher::SearchFromSeed(FastSVM const& model, PointType c
     BFGS<GradientSquaredNormFunctor> bfgs(gsnf);
     bfgs.minimize(current);
     if (gn2gn) {
-        *gn2gn = df.squaredGradientNormGradient(
+        *gn2gn = df.SquaredGradientNormGradient(
                 pointFromVector<PointType>(current)).getVector3fMap().norm();
     }
 

@@ -7,11 +7,11 @@ void ModelChecker::Check(DecisionFunction const& df, PointType const& point, flo
     bool failed = false;
     for (int i = 0; i < CheckWidth; ++i) {
         RangeImagePoint rip(point);
-        if (df.decisionFunction(rip.shift(step, -CheckOffset - i)) < 1e-5) {
+        if (df.Value(rip.shift(step, -CheckOffset - i)) < 1e-5) {
             failed = true;
             FailedPoints_++;
         }
-        if (df.decisionFunction(rip.shift(step, CheckOffset + 1 + i)) > -1e-5) {
+        if (df.Value(rip.shift(step, CheckOffset + 1 + i)) > -1e-5) {
             failed = true;
             FailedPoints_++;
         }

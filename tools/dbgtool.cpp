@@ -15,11 +15,11 @@ void testDecisionFunction() {
     PointType point = createPoint<PointType>(0.5, 0.5, 0.0);
     Eigen::MatrixXf hessian;
 
-    std::cout << df.decisionFunction(point) << std::endl;
-    std::cout << df.gradient(point) << std::endl;
-    df.hessian(point, &hessian);
+    std::cout << df.Value(point) << std::endl;
+    std::cout << df.Gradient(point) << std::endl;
+    df.Hessian(point, &hessian);
     std::cout << hessian << std::endl;
-    std::cout << df.squaredGradientNormGradient(point) << std::endl;
+    std::cout << df.SquaredGradientNormGradient(point) << std::endl;
 }
 
 void testTrainSetGenerator() {
@@ -59,6 +59,6 @@ void testGridRadiusTraversal() {
 }
 
 int main() {
-    testGridRadiusTraversal();
+    testDecisionFunction();
     return 0;
 }

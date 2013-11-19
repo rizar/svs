@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "df.h"
 
 #include "pcl/common/distances.h"
 #include "pcl/search/octree.h"
@@ -18,99 +19,6 @@ typedef CvSVMParams BaseSVMParams;
 typedef CvSVM BaseSVM;
 #endif
 
-class DecisionFunction {
-public:
-    DecisionFunction()
-    {
-    }
-
-    DecisionFunction(
-            float gamma,
-            std::vector<PointType> const& sv,
-            std::vector<float> const& alpha,
-            float rho)
-        : SV_(sv)
-        , Alpha_(alpha)
-        , Gamma_(gamma)
-        , Rho_(rho)
-    {
-        assert(SV_.size() == Alpha_.size());
-    }
-
-    void reset(float gamma, float rho) {
-        Gamma_ = gamma;
-        Rho_ = rho;
-        SV_.clear();
-        Alpha_.clear();
-    }
-
-    void addSupportVector(PointType const& newSV, float alpha) {
-        SV_.push_back(newSV);
-        Alpha_.push_back(alpha);
-    }
-
-    float kernelValueWithAlpha(int svIndex, PointType const& point) const {
-        float const dist2 = pcl::squaredEuclideanDistance(SV_[svIndex], point);
-        return Alpha_[svIndex] * exp(-Gamma_ * dist2);
-    }
-
-    float decisionFunction(PointType const& point) const {
-        float dfVal = 0.0;
-        for (int i = 0; i < SV_.size(); ++i) {
-            dfVal += kernelValueWithAlpha(i, point);
-        }
-        return dfVal;
-    }
-
-    PointType gradient(PointType const& point) const {
-        PointType result;
-        for (int i = 0; i < SV_.size(); ++i) {
-            PointType add = point;
-            add.getVector3fMap() -= SV_[i].getVector3fMap();
-            add.getVector3fMap() *= kernelValueWithAlpha(i, point);
-            // add = \alpha_i K(x, x_i) (x - x_i)
-            result.getVector3fMap() += add.getVector3fMap();
-        }
-
-        // result = -\sum\limits_{i=1}^n alpha_i K(x, x_i) (x - x_i)
-        result.getVector3fMap() *= -1;
-        return result;
-    }
-
-    void hessian(PointType const& point, Eigen::MatrixXf * result) const {
-        *result = Eigen::Matrix3f::Zero(3,  3);
-
-        for (int svi = 0; svi < SV_.size(); ++svi) {
-            float const coof = kernelValueWithAlpha(svi, point);
-
-            PointType diff = point;
-            auto diffMap = diff.getVector3fMap();
-            diffMap -= SV_[svi].getVector3fMap();
-
-            for (int x = 0; x < 3; ++x) {
-                for (int y = 0; y < 3; ++y) {
-                    (*result)(x, y) += coof * (2 * Gamma_ * diffMap(x) * diffMap(y) - (x == y ? 1 : 0));
-                }
-            }
-        }
-    }
-
-    PointType squaredGradientNormGradient(PointType const& point) const {
-        Eigen::MatrixXf hess;
-        hessian(point, &hess);
-        Eigen::Vector3f result = 2 * hess * gradient(point).getVector3fMap();
-
-        return createPoint<PointType>(result(0), result(1), result(2));
-    }
-
-
-public:
-    std::vector<PointType> SV_;
-    std::vector<float> Alpha_;
-    float Gamma_;
-    float Rho_;
-};
-
 class GradientSquaredNormFunctor : public BFGSDummyFunctor<double, 3> {
 public:
     GradientSquaredNormFunctor(DecisionFunction & df)
@@ -122,13 +30,13 @@ public:
 
     virtual Scalar operator()(VectorType const& x) {
         FCalled++;
-        PointType grad = DF_.gradient(createPoint<PointType>(x(0), x(1), x(2)));
+        PointType grad = DF_.Gradient(createPoint<PointType>(x(0), x(1), x(2)));
         return -sqr(grad.getVector3fMap().norm());
     }
 
     virtual void df(VectorType const& x, VectorType & res) {
         DFCalled++;
-        PointType grad = DF_.squaredGradientNormGradient(createPoint<PointType>(x(0), x(1), x(2)));
+        PointType grad = DF_.SquaredGradientNormGradient(createPoint<PointType>(x(0), x(1), x(2)));
         grad.getVector3fMap() *= -1;
         res = grad.getVector3fMap().cast<double>();
     }
@@ -202,9 +110,9 @@ public:
         // hardcoded constant is todo
         SVTree->radiusSearch(point, 3 * kernelWidth, Indices_, Distances_);
 
-        df->reset(get_params().gamma, decision_func->rho);
+        df->Reset(get_params().gamma, decision_func->rho);
         for (int i = 0; i < Indices_.size(); ++i) {
-            df->addSupportVector(svAsPoint(Indices_[i]), -get_alpha(Indices_[i]));
+            df->AddSupportVector(svAsPoint(Indices_[i]), -get_alpha(Indices_[i]));
         }
     }
 
@@ -238,9 +146,9 @@ public:
 
     void printStateAtPoint(PointType const& point, std::ostream & ostr) {
         ostr << "STATE AT " << point << std::endl;
-        ostr << "value: " << DF_.decisionFunction(point) << std::endl;
-        ostr << "gradient norm: " << DF_.gradient(point).getVector3fMap().norm() << std::endl;
-        ostr << "squred gradient norm gradient: " << DF_.squaredGradientNormGradient(point) << std::endl;
+        ostr << "value: " << DF_.Value(point) << std::endl;
+        ostr << "gradient norm: " << DF_.Gradient(point).getVector3fMap().norm() << std::endl;
+        ostr << "squred gradient norm gradient: " << DF_.SquaredGradientNormGradient(point) << std::endl;
     }
 
     static void printStateAtPoint(FastSVM const& model, PointType const& point, std::ostream & ostr) {
