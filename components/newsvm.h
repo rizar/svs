@@ -57,7 +57,6 @@ public:
     std::vector<SVMFloat> Alphas;
     std::vector<SVMFloat> Grad;
     std::vector<int> Status;
-    float Rho;
 
 public:
     int N_;
@@ -138,7 +137,7 @@ public:
     void SaveAlphas(std::ostream & ostr);
     void Train(PointCloud const& points, std::vector<float> const& labels);
 
-    SVMFloat const* Alphas() {
+    SVMFloat const* Alphas() const {
         return &Sol_.Alphas[0];
     }
 
@@ -191,6 +190,7 @@ public:
     int Iteration = 0;
     int SVCount = 0;
     float TargetFunction = 0.0;
+    float Rho = 0.0;
 
 private:
     SVMFloat C_ = 1;

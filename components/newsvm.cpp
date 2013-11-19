@@ -339,7 +339,7 @@ void SVM3D::CalcRho() {
         }
     }
 
-    Sol_.Rho = nFree > 0 ? sumFree / nFree : (ub + lb) * 0.5;
+    Rho = nFree > 0 ? sumFree / nFree : (ub + lb) * 0.5;
 }
 
 SVMFloat SVM3D::PivotsOptimality(int i, int j) const {

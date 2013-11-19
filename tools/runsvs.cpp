@@ -1,17 +1,7 @@
-#include "components/baseapp.h"
-#include "components/analysis.h"
-#include "components/fastsvm.h"
-#include "components/newsvm.h"
-#include "components/trainset.h"
-#include "components/searcher.h"
 #include "components/visualization.h"
-#include "components/check.h"
 #include "components/svs.h"
 
-#include "utilities/prettyprint.hpp"
-
-#include "pcl/common/time.h"
-#include "pcl/features/integral_image_normal.h"
+#include <pcl/io/pcd_io.h>
 
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -23,7 +13,7 @@
 
 namespace po = boost::program_options;
 
-class App : public BaseApp {
+class App {
 public:
     App(int argc, char* argv [])
     {
@@ -35,10 +25,7 @@ public:
     int Run();
 
 private:
-    void GenerateTrainingSet();
-    void Learn();
-    void LearnOld();
-    void Search();
+    void Load();
 
     void PrintParameters();
     void PrintStatistics();
@@ -49,74 +36,33 @@ private:
     void ExportAlphaMap();
 
     void Visualize();
-    void ShowFeaturePoints();
-    void ShowGradientMap();
-    void ShowRelativeLocalGradientMap();
-
-    void CalcNormals();
-    void CalcGradientNormsAndCheck();
-    void CalcRelativeLocalGradientNorms();
 
 private:
-    int Seed_ = 1;
+    PointCloud::Ptr Input_;
 
-// algorithm params
-    float MaxAlpha_ = 32;
-    float KernelWidth_ = 5;
-    float KernelThreshold_ = 1e-3;
-    float TerminateEps_ = 1e-2;
-    int BorderWidth_ = 1;
-    float StepWidth_ = 1;
-    float TakeProb_ = 1.0;
-    int NumFP_ = 100;
+    SVSParams Params_;
+    SVSBuilder Builder_;
 
 // visualization flags
     bool DoVisualize_ = false;
     bool DoShowNormals_ = false;
-    bool DoShowFP_ = false;
-    bool DoShowGradientMap_ = false;
-    bool DoShowRelLocGradMap_ = false;
+    bool DoShowGradientNorm_ = false;
 
 // other flags
-    bool DoCheck_ = false;
     bool DoLearnOld_ = false;
     bool SaveScreenshot_ = false;
-    bool UseGrid_ = true;
-    bool UseNormals_ = false;
 
 // visualization parameters
     std::string CameraDescription_;
 
-// source pathes
-    std::string AlphasPath_;
-
-// destination pathes
+// pathes
+    std::string InputPath_;
+    std::string OutputPath_;
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
     std::string SaveScreenshotPath_;
-    std::string OutputPath_;
     std::string LibSVMExportPath_;
     std::string AlphaMapPath_;
-
-// SVM related data
-    PointCloud::Ptr Objects_;
-    std::vector<float> Labels_;
-    GridNeighbourModificationStrategy::Grid2Num Grid2Num_;
-    GridNeighbourModificationStrategy::Num2Grid Num2Grid_;
-    std::vector<int> Pixel2Num_;
-    std::shared_ptr<GridNeighbourModificationStrategy> Strategy_;
-    FastSVM OldSVM_;
-    SVM3D SVM_;
-    FeaturePointSearcher Searcher_;
-    ModelChecker Checker_;
-
-// useful data
-    NormalCloud::Ptr Normals_;
-
-    float MinGradientNorm_;
-    float MaxGradientNorm_;
-    std::vector<float> GradientNorms_;
-    std::vector<float> RelLocGradNorms_;
 };
 
 void App::ParseArgs(int argc, char* argv []) {
@@ -124,34 +70,29 @@ void App::ParseArgs(int argc, char* argv []) {
     desc.add_options()
         ("help", "show help")
 
-        ("seed", po::value<int>(&Seed_))
+        ("seed", po::value<int>(&Params_.Seed))
+        ("tprob", po::value<float>(&Params_.TakeProb))
+        ("bwidth", po::value<int>(&Params_.BorderWidth))
+        ("stepwidth", po::value<float>(&Params_.StepWidth))
+        ("malpha", po::value<float>(&Params_.MaxAlpha))
+        ("kwidth", po::value<float>(&Params_.KernelWidth))
+        ("kthr", po::value<float>(&Params_.KernelThreshold))
+        ("teps", po::value<float>(&Params_.TerminateEps))
+        ("numfp", po::value<int>(&Params_.NumFP))
+        ("usegrid", po::value<bool>(&Params_.UseGrid))
+        ("usenr", po::value<bool>(&Params_.UseNormals)->zero_tokens())
+        ("alphas", po::value<std::string>(&Params_.AlphasPath))
 
-        ("tprob", po::value<float>(&TakeProb_))
-        ("bwidth", po::value<int>(&BorderWidth_))
-        ("stepwidth", po::value<float>(&StepWidth_))
-        ("malpha", po::value<float>(&MaxAlpha_))
-        ("kwidth", po::value<float>(&KernelWidth_))
-        ("kthr", po::value<float>(&KernelThreshold_))
-        ("teps", po::value<float>(&TerminateEps_))
-        ("numfp", po::value<int>(&NumFP_))
+        ("learnold", po::value<bool>(&DoLearnOld_)->zero_tokens())
 
-        ("docheck", po::value<bool>(&DoCheck_)->zero_tokens())
         ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
         ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
-        ("showfp", po::value<bool>(&DoShowFP_)->zero_tokens())
-        ("showgm", po::value<bool>(&DoShowGradientMap_)->zero_tokens())
-        ("showrlgm", po::value<bool>(&DoShowRelLocGradMap_)->zero_tokens())
-
-        ("usegrid", po::value<bool>(&UseGrid_))
-        ("usenr", po::value<bool>(&UseNormals_)->zero_tokens())
-        ("learnold", po::value<bool>(&DoLearnOld_)->zero_tokens())
 
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
         ("savesc", po::value<std::string>(&SaveScreenshotPath_))
         ("input", po::value<std::string>(&InputPath_))
-        ("alphas", po::value<std::string>(&AlphasPath_))
         ("output", po::value<std::string>(&OutputPath_))
         ("libsvm", po::value<std::string>(&LibSVMExportPath_))
         ("alphamap", po::value<std::string>(&AlphaMapPath_));
@@ -176,99 +117,30 @@ void App::ParseArgs(int argc, char* argv []) {
 }
 
 int App::Run() {
-    srand(Seed_);
-
     Load();
+    Builder_.SetParams(Params_);
+    Builder_.SetInputCloud(Input_);
     PrintParameters();
 
-    GenerateTrainingSet();
+    Builder_.GenerateTrainingSet();
     ExportForLibSVM();
 
-    Learn();
-    LearnOld();
+    Builder_.Learn();
+    if (DoLearnOld_) {
+        Builder_.LearnOld();
+    }
     ExportAlphaMap();
 
-    if (OutputPath_.size()) {
-        std::ofstream ofstr(OutputPath_);
-        SupportVectorShape(Searcher_.FeaturePoints).SaveAsText(ofstr);
-    }
+    Builder_.CalcGradientNorms();
 
     PrintStatistics();
     Visualize();
     return 0;
 }
 
-void App::GenerateTrainingSet() {
-    CalcDistanceToNN();
-
-    TrainingSetGenerator tsg(BorderWidth_, TakeProb_, StepWidth_);
-    if (UseNormals_) {
-        CalcNormals();
-        tsg.GenerateUsingNormals(*Input_, *Normals_, DistToNN_);
-    } else {
-        tsg.GenerateFromSensor(*Input_, DistToNN_);
-    }
-
-    Objects_.reset(new PointCloud(tsg.Objects));
-    Labels_ = tsg.Labels;
-    Num2Grid_ = tsg.Num2Grid;
-    Grid2Num_ = tsg.Grid2Num;
-    Pixel2Num_ = tsg.Pixel2Num;
-}
-
-void App::Learn() {
-    if (UseGrid_) {
-        Strategy_.reset(new GridNeighbourModificationStrategy(
-                    Input_->height, Input_->width,
-                    Grid2Num_, Num2Grid_,
-                    KernelWidth_, KernelThreshold_, Resolution_,
-                    1 << 30));
-        SVM_.SetStrategy(Strategy_);
-    }
-    SVM_.SetParams(MaxAlpha_, 1 / sqr(KernelWidth_ * Resolution_), TerminateEps_);
-
-    std::ifstream alphaStr(AlphasPath_.c_str());
-    if (alphaStr.good()) {
-        SVM_.Init(*Objects_, Labels_, alphaStr);
-    } else {
-        pcl::ScopeTime st("SVM");
-        SVM_.Train(*Objects_, Labels_);
-
-        alphaStr.close();
-        if (AlphasPath_.size()) {
-            std::ofstream writeAlphaStr(AlphasPath_.c_str());
-            SVM_.SaveAlphas(writeAlphaStr);
-        }
-    }
-}
-
-void App::LearnOld() {
-    if (! DoLearnOld_) {
-        return;
-    }
-
-    BaseSVMParams params;
-    params.C = MaxAlpha_;
-    params.gamma = 1 / sqr(KernelWidth_ * Resolution_);
-    params.term_crit.type = CV_TERMCRIT_EPS;
-    params.term_crit.epsilon = TerminateEps_;
-    My::kernelThreshold = KernelThreshold_;
-    {
-        pcl::ScopeTime st("Old SVM");
-        OldSVM_.train(*Objects_, Labels_, params);
-    }
-}
-
-void App::CalcNormals() {
-    if (Normals_.get()) {
-        return;
-    }
-    Normals_.reset(new NormalCloud);
-
-    pcl::IntegralImageNormalEstimation<PointType, NormalType> ne;
-    ne.setNormalSmoothingSize(5.0f);
-    ne.setInputCloud(Input_);
-    ne.compute(*Normals_);
+void App::Load() {
+    Input_.reset(new PointCloud);
+    pcl::io::loadPCDFile(InputPath_, *Input_);
 }
 
 void App::Visualize() {
@@ -280,30 +152,45 @@ void App::Visualize() {
             return Color(Input_->at(i));
             });
     if (DoShowNormals_) {
-        CalcNormals();
-        viewer.addPointCloudNormals<PointType, NormalType>(Input_, Normals_);
-        viewer.EasyAdd(Input_, "input", [this] (int i) {
-                    return pcl_isnan(Normals_->at(i).normal_x) ? Color({0, 0, 255}) : Color({255, 0, 0});
+        Builder_.CalcNormals();
+        NormalCloud::ConstPtr normals = Builder_.Normals;
+        viewer.addPointCloudNormals<PointType, NormalType>(Input_, normals);
+        viewer.EasyAdd(Input_, "input", [this, &normals] (int i) {
+                    return pcl_isnan(normals->at(i).normal_x)
+                        ? Color({0, 0, 255})
+                        : Color({255, 0, 0});
                 });
     }
     viewer.EasyAdd(Input_, "input", [this] (int i) {
-                int num = Pixel2Num_[i];
+                int const num = Builder_.Pixel2TrainNum[i];
                 if (num == -1) {
                     return Color();
                 }
-                float alpha = SVM_.Alphas()[num];
+                float const alpha = Builder_.SVM().Alphas()[num];
                 return Color({static_cast<int>(alpha * 255), 0, static_cast<int>((1 - alpha) * 255)});
+            });
+    viewer.EasyAdd(Input_, "input", [this] (int i) {
+                int const num = Builder_.Pixel2RowIndex[i];
+                if (num == -1) {
+                    return Color();
+                }
+                float const gn = Builder_.GradientNorm[num];
+                float const relGN = gn / Builder_.MaxGradientNorm;
+                return Color({static_cast<int>(relGN * 255), 0, static_cast<int>((1 - relGN) * 255)});
             });
     viewer.Run(SaveScreenshotPath_);
 }
 
+// ALL KINDS OF OUTPUT
+
 void App::ExportForLibSVM() {
     std::ofstream ofstr(LibSVMExportPath_);
-    for (int i = 0; i < Objects_->size(); ++i) {
-        ofstr << Labels_[i] << ' '
-              << "1:" << Objects_->at(i).x << ' '
-              << "2:" << Objects_->at(i).y << ' '
-              << "3:" << Objects_->at(i).z << '\n';
+    for (int i = 0; i < Builder_.Objects->size(); ++i) {
+        PointType const& point = Builder_.Objects->at(i);
+        ofstr << Builder_.Labels[i] << ' '
+              << "1:" << point.x << ' '
+              << "2:" << point.y << ' '
+              << "3:" << point.z << '\n';
     }
 }
 
@@ -316,13 +203,13 @@ void App::ExportAlphaMap() {
     cv::Mat image(Input_->height, Input_->width, CV_8UC3);
     for (int i = 0; i < Input_->height; ++i) {
         for (int j = 0; j < Input_->width; ++j) {
-            std::vector<int> const& nums = Grid2Num_[i][j];
-            if (nums.empty()) {
+            int num = Builder_.Pixel2TrainNum[i * Input_->width + j];
+            if (num == -1) {
                 image.at<cv::Vec3b>(i, j) = cv::Vec3b(0, 0, 0);
                 continue;
             }
 
-            float const relAlpha = SVM_.Alphas()[nums[0]] / MaxAlpha_;
+            float const relAlpha = Builder_.SVM().Alphas()[num] / Params_.MaxAlpha;
             image.at<cv::Vec3b>(i, j) = cv::Vec3b(255 * (1 - relAlpha), 0, 255 * relAlpha);
         }
     }
@@ -332,29 +219,34 @@ void App::ExportAlphaMap() {
 
 void App::PrintParameters() {
     std::cout << "-------------------- PARAMETERS" << std::endl;
-    std::cout << "Seed is " << Seed_ << std::endl;
-    std::cout << "Input cloud size is " << InputNoNan_->size() << " points" << std::endl;
-    std::cout << "Resolution is " << Resolution_ << std::endl;
-    std::cout << "Kernel width is " << KernelWidth_ << " resolutions" << std::endl;
-    std::cout << "Kernel threshold is " << KernelThreshold_ << std::endl;
-    std::cout << "Gamma is " << 1 / sqr(KernelWidth_ * Resolution_) << std::endl;
-    std::cout << "Max alpha constraint is " << MaxAlpha_ << std::endl;
-    std::cout << "Terminate epsilon is " << TerminateEps_ << std::endl;
-    std::cout << "Border width is " << BorderWidth_ << std::endl;
-    std::cout << "Step width is " << StepWidth_ << std::endl;
-    std::cout << "Take probability is " << TakeProb_ << std::endl;
-    std::cout << "Number of feature points is " << NumFP_ << std::endl;
+    std::cout << "Seed is " << Params_.Seed << std::endl;
+    std::cout << "Input cloud size is " << Builder_.InputNoNan->size() << " points" << std::endl;
+    std::cout << "Resolution is " << Builder_.Resolution << std::endl;
+    std::cout << "Kernel width is " << Params_.KernelWidth << " resolutions" << std::endl;
+    std::cout << "Kernel threshold is " << Params_.KernelThreshold << std::endl;
+    std::cout << "Gamma is " << Builder_.Gamma << std::endl;
+    std::cout << "Max alpha constraint is " << Params_.MaxAlpha << std::endl;
+    std::cout << "Terminate epsilon is " << Params_.TerminateEps << std::endl;
+    std::cout << "Border width is " << Params_.BorderWidth << std::endl;
+    std::cout << "Step width is " << Params_.StepWidth << std::endl;
+    std::cout << "Take probability is " << Params_.TakeProb << std::endl;
+    std::cout << "Number of feature points is " << Params_.NumFP << std::endl;
 }
 
 void App::PrintStatistics() {
+    GridNeighbourModificationStrategy const& strat = *Builder_.Strategy;
+
     std::cout << "-------------------- STATISTICS" << std::endl;
-    std::cout << "New SVM converged in " << SVM_.Iteration << " iterations" << std::endl;
-    std::cout << Objects_->size() << " input vectors" << std::endl;
-    std::cout << SVM_.SVCount << " support vectors" << std::endl;
-    std::cout << SVM_.TargetFunction << " target function" << std::endl;
-    if (UseGrid_) {
-        Strategy_->PrintStatistics(std::cout);
-    }
+    std::cout << "New SVM converged in " << Builder_.SVM().Iteration << " iterations" << std::endl;
+    std::cout << "SVM3D: " << Builder_.Objects->size() << " input vectors" << std::endl;
+    std::cout << "SVM3D: " << Builder_.SVM().SVCount << " support vectors" << std::endl;
+    std::cout << "SVM3D: " << Builder_.SVM().TargetFunction << " target function" << std::endl;
+    std::cout << "GridStrategy: Number of cache misses: " << strat.NumCacheMisses << std::endl;
+    std::cout << "GridStrategy: Number of optimization failures: " << strat.NumOptimizeFailures << std::endl;
+    std::cout << "GridStrategy: Average number of neighbors: " <<
+        static_cast<float>(strat.TotalNeighborsProcessed) / strat.NumNeighborsCalculations << std::endl;
+    std::cout << "SVSBuilder: Minimum gradient norm " << Builder_.MinGradientNorm << std::endl;
+    std::cout << "SVSBuilder: Maximum gradient norm " << Builder_.MaxGradientNorm << std::endl;
 }
 
 int main(int argc, char* argv []) {

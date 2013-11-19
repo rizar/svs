@@ -5,7 +5,7 @@
 void TrainingSetGenerator::GenerateFromSensor(PointCloud const& input,
                 std::vector<float> const& localRes)
 {
-    Grid2Num.resize(input.height, std::vector< std::vector<int> >(input.width));
+    Grid2Num.Resize(input.height, input.width);
     Pixel2Num.resize(input.height * input.width);
 
     int indexNoNan = 0;
@@ -39,7 +39,7 @@ void TrainingSetGenerator::GenerateFromSensor(PointCloud const& input,
 void TrainingSetGenerator::GenerateUsingNormals(const PointCloud & input, const NormalCloud & normals,
         const std::vector<float> & localRes)
 {
-    Grid2Num.resize(input.height, std::vector< std::vector<int> >(input.width));
+    Grid2Num.Resize(input.height, input.width);
     Pixel2Num.resize(input.height * input.width);
 
     int indexNoNan = 0;
@@ -75,6 +75,6 @@ int TrainingSetGenerator::AddPoint(int x, int y, PointType const& point, float l
     Objects.push_back(point);
     Labels.push_back(label);
     Num2Grid.push_back({y, x});
-    Grid2Num[y][x].push_back(Objects.size() - 1);
+    Grid2Num.at(y, x).push_back(Objects.size() - 1);
     return Objects.size() - 1;
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include "pcl/visualization/pcl_visualizer.h"
 
 #include <functional>

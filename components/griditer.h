@@ -3,6 +3,8 @@
 /* A self-contained tool to do circular cycles
  */
 
+#include <vector>
+
 class GridRadiusTraversal {
 public:
     GridRadiusTraversal(int width, int height)

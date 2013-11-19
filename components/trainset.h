@@ -29,8 +29,8 @@ public:
     PointCloud Objects;
     std::vector<float> Labels;
     std::vector<int> Pixel2Num;
-    GridNeighbourModificationStrategy::Num2Grid Num2Grid;
-    GridNeighbourModificationStrategy::Grid2Num Grid2Num;
+    Number2Grid Num2Grid;
+    Grid2Numbers Grid2Num;
 
 private:
     bool TossCoin() const {

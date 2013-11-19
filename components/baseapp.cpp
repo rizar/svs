@@ -10,8 +10,13 @@ void BaseApp::Load() {
     Input_.reset(new PointCloud);
     InputNoNan_.reset(new PointCloud);
     pcl::io::loadPCDFile(InputPath_, *Input_);
+
+    Height_ = Input_->height;
+    Width_ = Input_->width;
+
     std::vector<int> tmp;
     pcl::removeNaNFromPointCloud(*Input_, *InputNoNan_, tmp);
+    CalcIndicesInOriginal();
 
     InputKDTree_.reset(new pcl::search::KdTree<PointType>);
     InputKDTree_->setInputCloud(InputNoNan_);
@@ -34,5 +39,15 @@ void BaseApp::CalcDistanceToNN() {
     for (int i = 0; i < InputNoNan_->size(); ++i) {
         InputKDTree_->nearestKSearch(i, 2, indices, dist2);
         DistToNN_[i] = sqrt(dist2[1]);
+    }
+}
+
+void BaseApp::CalcIndicesInOriginal() {
+    assert(IndexInOrig_.empty());
+    for (int i = 0; i < Input_->size(); ++i) {
+        if (pointHasNan(Input_->at(i))) {
+            continue;
+        }
+        IndexInOrig_.push_back(i);
     }
 }

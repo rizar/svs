@@ -26,7 +26,7 @@ void GridNeighbourModificationStrategy::OptimizePivots(int * i, int * j) {
     }
     assert(*j!= *i && 0 <= *j && *j < Num2Grid_.size());
 
-    NumOptimizeFailures_ += startJ == *j;
+    NumOptimizeFailures += startJ == *j;
 }
 
 void GridNeighbourModificationStrategy::ReflectAlphaChange(int idx, SVMFloat delta) {
@@ -37,14 +37,6 @@ void GridNeighbourModificationStrategy::ReflectAlphaChange(int idx, SVMFloat del
     for (int k = 0; k < nbh.size(); ++k) {
         ModifyGradient(nbh[k], qv[k] * delta);
     }
-}
-
-void GridNeighbourModificationStrategy::PrintStatistics(std::ostream & ostr) const {
-    ostr << "GridStrategy: Radius: " << Radius_ << std::endl;
-    ostr << "GridStrategy: Number of cache misses: " << NumCacheMisses_ << std::endl;
-    ostr << "GridStrategy: Number of optimization failures: " << NumOptimizeFailures_ << std::endl;
-    ostr << "GridStrategy: Average number of neighbors: " <<
-        static_cast<float>(TotalNeighborsProcessed_) / NumNeighborsCalculations_ << std::endl;
 }
 
 void GridNeighbourModificationStrategy::InitializeNeighbors(int idx) {
@@ -58,29 +50,23 @@ void GridNeighbourModificationStrategy::InitializeNeighbors(int idx) {
         return;
     }
     if (! firstTime) {
-        NumCacheMisses_++;
+        NumCacheMisses++;
     }
 
     int const y = Num2Grid_[idx].first;
     int const x = Num2Grid_[idx].second;
 
-    GridRadiusTraversal grt(GridHeight_, GridWidth_);
-    auto processGrid = [this, &idx, &nbh, &qvls] (int j, int i) {
-            std::vector<int> const& els = Grid2Num_[j][i];
-            for (int k = 0; k < els.size(); ++k) {
-                int const nbhIdx = els[k];
-
+    Grid2Num_.TraverseRectangle(y, x, Radius_,
+            [this, &idx, &nbh, &qvls] (int /*y*/, int /*x*/, int nbhIdx) {
                 float const dist2 = Parent()->Dist2(idx, nbhIdx);
                 if (dist2 <= Radius2Scaled_) {
                     nbh.push_back(nbhIdx);
                     qvls.push_back(Parent()->QValue(idx, nbhIdx, dist2));
                 }
-            }
-    };
-    grt.TraverseRectangle<decltype(processGrid)>(y, x, Radius_, processGrid);
+            });
 
-    NumNeighborsCalculations_++;
-    TotalNeighborsProcessed_ += nbh.size();
+    NumNeighborsCalculations++;
+    TotalNeighborsProcessed += nbh.size();
 
     RepackNeighbors(idx);
     RegisterNewNeighbors(nbh.size());
