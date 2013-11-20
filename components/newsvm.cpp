@@ -276,8 +276,10 @@ bool SVM3D::Iterate() {
     SVMFloat const deltaAi = Ai - oldAi;
     SVMFloat const deltaAj = Aj - oldAj;
 
+#ifndef NDEBUG
     SVMFloat const oldGi = Gi;
     SVMFloat const oldGj = Gj;
+#endif
     Strategy_->ReflectAlphaChange(i, deltaAi);
     Strategy_->ReflectAlphaChange(j, deltaAj);
     assert(fabs(Gi - oldGi - Qii * deltaAi - Qij * deltaAj) < 1e-3);

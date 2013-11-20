@@ -85,7 +85,7 @@ public:
     void Learn();
     void InitSVM(std::vector<SVMFloat> const& alphas);
 
-    void CalcGradientNorms();
+    void CalcGradients();
     void CalcNormals();
 
     SVM3D const& SVM() {
@@ -103,13 +103,14 @@ public:
 
     PointCloud::Ptr Objects;
     std::vector<float> Labels;
-    std::vector<int> Pixel2TrainNum;
+    std::vector<int> Pixel2TrainNum; // pixel indices
 
     float MinGradientNorm;
     float MaxGradientNorm;
-    std::vector<float> GradientNorm;
+    std::vector<float> GradientNorms; // row indices
+    NormalCloud::Ptr Gradients; // pixel indices
 
-    NormalCloud::Ptr Normals;
+    NormalCloud::Ptr Normals; // pixel indices
 
     std::shared_ptr<GridNeighbourModificationStrategy> Strategy;
 

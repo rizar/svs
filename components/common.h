@@ -3,6 +3,8 @@
 #include "pcl/point_cloud.h"
 #include "pcl/point_types.h"
 
+#include <limits>
+
 typedef pcl::PointXYZRGB PointType;
 typedef pcl::Normal NormalType;
 typedef pcl::PointCloud<PointType> PointCloud;
@@ -10,10 +12,6 @@ typedef pcl::PointCloud<NormalType> NormalCloud;
 
 inline float sqr(float x) {
     return x * x;
-}
-
-inline bool pointHasNan(PointType const& p) {
-    return pcl_isnan(p.x) || pcl_isnan(p.y) || pcl_isnan(p.z);
 }
 
 template <class P>
@@ -25,11 +23,25 @@ P createPoint(float x, float y, float z) {
     return p;
 }
 
+inline bool pointHasNan(PointType const& p) {
+    return pcl_isnan(p.x) || pcl_isnan(p.y) || pcl_isnan(p.z);
+}
+
+inline PointType nanPoint() {
+    float const nan = std::numeric_limits<float>::quiet_NaN();
+    return createPoint<PointType>(nan, nan, nan);
+}
+
 template <class P, class V>
 P pointFromVector(V const& v) {
     P p;
     p.getVector3fMap() = v.template cast<float>();
     return p;
+}
+
+template <class P>
+pcl::Normal toNormal(P p) {
+    return pcl::Normal(p.x, p.y, p.z);
 }
 
 inline PointType addTemperature(PointType const& p, float t,

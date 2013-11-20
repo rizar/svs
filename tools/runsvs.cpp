@@ -1,6 +1,8 @@
 #include "components/visualization.h"
 #include "components/svs.h"
 
+#include "utilities/prettyprint.hpp"
+
 #include <pcl/io/pcd_io.h>
 
 #include "opencv2/core/core.hpp"
@@ -10,6 +12,7 @@
 
 #include <iostream>
 #include <memory>
+#include <iterator>
 
 namespace po = boost::program_options;
 
@@ -46,7 +49,7 @@ private:
 // visualization flags
     bool DoVisualize_ = false;
     bool DoShowNormals_ = false;
-    bool DoShowGradientNorm_ = false;
+    bool DoShowGradients_ = false;
 
 // other flags
     bool DoLearnOld_ = false;
@@ -66,6 +69,9 @@ private:
     std::string SaveScreenshotPath_;
     std::string LibSVMExportPath_;
     std::string AlphaMapPath_;
+
+// status
+    bool TrainedModel_ = false;
 };
 
 void App::ParseArgs(int argc, char* argv []) {
@@ -88,6 +94,7 @@ void App::ParseArgs(int argc, char* argv []) {
 
         ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
         ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
+        ("showgr", po::value<bool>(&DoShowGradients_)->zero_tokens())
 
         ("fpreport", po::value<std::string>(&FPReportOutputPath_))
         ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
@@ -126,10 +133,27 @@ int App::Run() {
     Builder_.GenerateTrainingSet();
     ExportForLibSVM();
 
-    Builder_.Learn();
+    std::ifstream alphaInput(AlphasPath_.c_str());
+    if (alphaInput.good()) {
+        std::vector<SVMFloat> alphas;
+        std::copy(std::istream_iterator<SVMFloat>(alphaInput), std::istream_iterator<SVMFloat>(),
+                std::back_inserter(alphas));
+
+        Builder_.InitSVM(alphas);
+    } else {
+        Builder_.Learn();
+        TrainedModel_ = true;
+
+        if (AlphasPath_.size()) {
+            alphaInput.close();
+            std::ofstream alphaOutput(AlphasPath_.c_str());
+            std::copy(Builder_.SVM().Alphas(), Builder_.SVM().Alphas() + Builder_.Objects->size(),
+                    std::ostream_iterator<SVMFloat>(alphaOutput, "\n"));
+        }
+    }
     ExportAlphaMap();
 
-    Builder_.CalcGradientNorms();
+    Builder_.CalcGradients();
 
     PrintStatistics();
     Visualize();
@@ -159,6 +183,10 @@ void App::Visualize() {
                         : Color({255, 0, 0});
                 });
     }
+    if (DoShowGradients_) {
+        NormalCloud::ConstPtr grads = Builder_.Gradients;
+        viewer.addPointCloudNormals<PointType, NormalType>(Input_, grads, 100, 0.002);
+    }
     viewer.EasyAdd(Input_, "input", [this] (int i) {
                 int const num = Builder_.Pixel2TrainNum[i];
                 if (num == -1) {
@@ -172,8 +200,8 @@ void App::Visualize() {
                 if (num == -1) {
                     return Color();
                 }
-                float const gn = Builder_.GradientNorm[num];
-                float const relGN = gn / Builder_.MaxGradientNorm;
+                float const gn = Builder_.GradientNorms[num];
+                float const relGN = std::min(1.0f, gn / Builder_.MaxGradientNorm);
                 return Color({static_cast<int>(relGN * 255), 0, static_cast<int>((1 - relGN) * 255)});
             });
     viewer.Run(SaveScreenshotPath_);
@@ -232,6 +260,9 @@ void App::PrintParameters() {
 }
 
 void App::PrintStatistics() {
+    if (! TrainedModel_) {
+        return;
+    }
     GridNeighbourModificationStrategy const& strat = *Builder_.Strategy;
 
     std::cout << "-------------------- STATISTICS" << std::endl;

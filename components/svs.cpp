@@ -139,24 +139,29 @@ void SVSBuilder::Learn() {
     BuildGrid2SV();
 }
 
-void SVSBuilder::CalcGradientNorms() {
-    if (GradientNorm.size()) {
+void SVSBuilder::CalcGradients() {
+    if (GradientNorms.size()) {
         return;
     }
     pcl::ScopeTime st("CalcGradientNorms");
 
-    GradientNorm.resize(Input->size());
+    Gradients.reset(new NormalCloud);
+    Gradients->points.resize(Input->size(), toNormal(nanPoint()));
+    GradientNorms.resize(InputNoNan->size());
+
     DecisionFunction df;
     for (int i = 0; i < InputNoNan->size(); ++i) {
         int const pixel = RowIndex2Pixel.at(i);
         int const y = pixel / Width_;
         int const x = pixel % Width_;
         BuildDF(y, x, &df);
-        GradientNorm[i] = df.Gradient(InputNoNan->at(i)).getVector3fMap().norm();
+        auto const grad = df.Gradient(InputNoNan->at(i));
+        Gradients->at(RowIndex2Pixel[i]) = toNormal(grad);
+        GradientNorms[i] = grad.getVector3fMap().norm();
     }
 
-    MinGradientNorm = *min_element(GradientNorm.begin(), GradientNorm.end());
-    MaxGradientNorm = *max_element(GradientNorm.begin(), GradientNorm.end());
+    MinGradientNorm = *min_element(GradientNorms.begin(), GradientNorms.end());
+    MaxGradientNorm = *max_element(GradientNorms.begin(), GradientNorms.end());
 }
 
 void SVSBuilder::BuildGrid2SV() {
@@ -172,7 +177,7 @@ void SVSBuilder::BuildGrid2SV() {
 void SVSBuilder::BuildDF(int y, int x, DecisionFunction * df) {
     df->Reset(Gamma, SVM().Rho);
     PointType const& point = Input->at(x, y);
-    Grid2SV_.TraverseRectangle(x, y, PixelRadius, [this, &point, &df] (int /*y*/, int /*x*/, int idx) {
+    Grid2SV_.TraverseRectangle(y, x, PixelRadius, [this, &point, &df] (int /*y*/, int /*x*/, int idx) {
                 PointType const& sv = Objects->operator[](idx);
                 if (pcl::squaredEuclideanDistance(point, sv) <= Radius2) {
                     df->AddSupportVector(sv, SVM().Alphas()[idx]);

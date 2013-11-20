@@ -65,10 +65,8 @@ void testSVSBuilderGradientNorms() {
     input->height = height;
     input->width = width;
 
-    float const nan = std::numeric_limits<float>::quiet_NaN();
-    assert(! pcl_isfinite(nan));
-    input->at(1, 2) = createPoint<PointType>(nan, nan, nan);
-    input->at(2, 1) = input->at(1, 2);
+    input->at(1, 2) = nanPoint();
+    input->at(2, 1) = nanPoint();
     input->is_dense = false;
 
     auto initBuilder = [params, input] (SVSBuilder * builder) {
@@ -94,14 +92,14 @@ void testSVSBuilderGradientNorms() {
         std::vector<SVMFloat> alphas(builder.Objects->size());
         alphas.at(findPos(*builder.Objects, 3, 4, 1)) = 1.0;
         builder.InitSVM(alphas);
-        builder.CalcGradientNorms();
+        builder.CalcGradients();
 
         assert(builder.Gamma == 0.25);
         assert(builder.PixelRadius == 3);
         assert(fabs(builder.Radius2 - 9.2) < 0.1);
-        assert(fabs(builder.GradientNorm[rowIndex(builder, 2, 2)] - exp(-1.25) * sqrt(5)) < 1e-7);
-        assert(builder.GradientNorm[rowIndex(builder, 4, 7)] == 0.0);
-        assert(builder.GradientNorm[rowIndex(builder, 3, 4)] == 0.0);
+        assert(fabs(builder.GradientNorms[rowIndex(builder, 2, 2)] - exp(-1.25) * sqrt(5)) < 1e-7);
+        assert(builder.GradientNorms[rowIndex(builder, 4, 7)] == 0.0);
+        assert(builder.GradientNorms[rowIndex(builder, 3, 4)] == 0.0);
     }
 }
 
