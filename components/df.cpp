@@ -41,6 +41,7 @@ PointType DecisionFunction::Gradient(PointType const& point) const {
 
     // result = -\sum\limits_{i=1}^n alpha_i K(x, x_i) (x - x_i)
     result.getVector3fMap() *= -1;
+    // differs from real gradient in 2\gamma times
     return result;
 }
 

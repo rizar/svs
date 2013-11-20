@@ -106,10 +106,16 @@ void SVSBuilder::CalcNormals() {
 void SVSBuilder::SetInputCloud(PointCloud::ConstPtr input) {
     BaseBuilder::SetInputCloud(input);
     Gamma = 1 / sqr(Params_.KernelWidth * Resolution);
-    PixelRadius_ = static_cast<int>(sqrt(-log(Params_.KernelThreshold)
-        * Params_.KernelWidth));
-    Radius2_ = -log(Params_.KernelThreshold)
+    PixelRadius = static_cast<int>(sqrt(-log(Params_.KernelThreshold))
+        * Params_.KernelWidth);
+    Radius2 = -log(Params_.KernelThreshold)
         * sqr(Params_.KernelWidth * Resolution);
+}
+
+void SVSBuilder::InitSVM(std::vector<SVMFloat> const& alphas) {
+    assert(Objects->size() == alphas.size());
+    SVM_.Init(*Objects, Labels, alphas);
+    BuildGrid2SV();
 }
 
 void SVSBuilder::Learn() {
@@ -125,35 +131,12 @@ void SVSBuilder::Learn() {
     }
     SVM_.SetParams(Params_.MaxAlpha, Gamma, Params_.TerminateEps);
 
-    std::string const& path = Params_.AlphasPath.c_str();
-    std::ifstream alphaStr(path);
-    if (alphaStr.good()) {
-        SVM_.Init(*Objects, Labels, alphaStr);
-    } else {
+    {
         pcl::ScopeTime st("SVM");
         SVM_.Train(*Objects, Labels);
-
-        alphaStr.close();
-        if (path.size()) {
-            std::ofstream writeAlphaStr(path);
-            SVM_.SaveAlphas(writeAlphaStr);
-        }
     }
 
     BuildGrid2SV();
-}
-
-void SVSBuilder::LearnOld() {
-    BaseSVMParams params;
-    params.C = Params_.MaxAlpha;
-    params.gamma = Gamma;
-    params.term_crit.type = CV_TERMCRIT_EPS;
-    params.term_crit.epsilon = Params_.TerminateEps;
-    My::kernelThreshold = Params_.KernelThreshold;
-    {
-        pcl::ScopeTime st("Old SVM");
-        OldSVM_.train(*Objects, Labels, params);
-    }
 }
 
 void SVSBuilder::CalcGradientNorms() {
@@ -189,9 +172,9 @@ void SVSBuilder::BuildGrid2SV() {
 void SVSBuilder::BuildDF(int y, int x, DecisionFunction * df) {
     df->Reset(Gamma, SVM().Rho);
     PointType const& point = Input->at(x, y);
-    Grid2SV_.TraverseRectangle(x, y, PixelRadius_, [this, &point, &df] (int /*y*/, int /*x*/, int idx) {
+    Grid2SV_.TraverseRectangle(x, y, PixelRadius, [this, &point, &df] (int /*y*/, int /*x*/, int idx) {
                 PointType const& sv = Objects->operator[](idx);
-                if (pcl::squaredEuclideanDistance(point, sv) <= Radius2_) {
+                if (pcl::squaredEuclideanDistance(point, sv) <= Radius2) {
                     df->AddSupportVector(sv, SVM().Alphas()[idx]);
                 }
             });

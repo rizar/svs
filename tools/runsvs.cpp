@@ -55,8 +55,11 @@ private:
 // visualization parameters
     std::string CameraDescription_;
 
-// pathes
+// source pathes
     std::string InputPath_;
+    std::string AlphasPath_;
+
+// dest pathes
     std::string OutputPath_;
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
@@ -81,9 +84,7 @@ void App::ParseArgs(int argc, char* argv []) {
         ("numfp", po::value<int>(&Params_.NumFP))
         ("usegrid", po::value<bool>(&Params_.UseGrid))
         ("usenr", po::value<bool>(&Params_.UseNormals)->zero_tokens())
-        ("alphas", po::value<std::string>(&Params_.AlphasPath))
-
-        ("learnold", po::value<bool>(&DoLearnOld_)->zero_tokens())
+        ("alphas", po::value<std::string>(&AlphasPath_))
 
         ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
         ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
@@ -126,9 +127,6 @@ int App::Run() {
     ExportForLibSVM();
 
     Builder_.Learn();
-    if (DoLearnOld_) {
-        Builder_.LearnOld();
-    }
     ExportAlphaMap();
 
     Builder_.CalcGradientNorms();

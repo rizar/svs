@@ -133,8 +133,7 @@ public:
     }
 
     void Init(PointCloud const& points, std::vector<float> const& labels,
-            std::istream & istr);
-    void SaveAlphas(std::ostream & ostr);
+            std::vector<SVMFloat> const& alphas);
     void Train(PointCloud const& points, std::vector<float> const& labels);
 
     SVMFloat const* Alphas() const {

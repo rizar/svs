@@ -1,6 +1,6 @@
 #include "common.h"
 #include "gridstrategy.h"
-#include "fastsvm.h"
+#include "df.h"
 
 #include "pcl/search/kdtree.h"
 
@@ -49,9 +49,7 @@ struct SVSParams {
     size_t CacheSize = 1 << 30;
 
     bool UseGrid = true;
-    bool UseNormals = false;
-
-    std::string AlphasPath;
+    bool UseNormals = true;
 };
 
 class BaseBuilder {
@@ -85,7 +83,7 @@ public:
     void SetInputCloud(PointCloud::ConstPtr input);
     void GenerateTrainingSet();
     void Learn();
-    void LearnOld();
+    void InitSVM(std::vector<SVMFloat> const& alphas);
 
     void CalcGradientNorms();
     void CalcNormals();
@@ -100,6 +98,8 @@ private:
 
 public:
     float Gamma;
+    float Radius2;
+    float PixelRadius;
 
     PointCloud::Ptr Objects;
     std::vector<float> Labels;
@@ -117,15 +117,11 @@ private:
 // basic params
     SVSParams Params_;
 
-    float Radius2_;
-    float PixelRadius_;
-
 // auxillary data
     Grid2Numbers Grid2Num_;
     Grid2Numbers Grid2SV_;
     Number2Grid Num2Grid_;
 
-// workhorses
-    FastSVM OldSVM_;
+// workhorse
     SVM3D SVM_;
 };
