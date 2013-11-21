@@ -40,14 +40,14 @@ void BaseBuilder::SetInputCloud(PointCloud::ConstPtr input) {
 }
 
 void BaseBuilder::CalcIndicesInOriginal() {
-    assert(RowIndex2Pixel.empty());
-    Pixel2RowIndex.resize(Input->size());
+    assert(RawIndex2Pixel.empty());
+    Pixel2RawIndex.resize(Input->size(), -1);
     for (int i = 0; i < Input->size(); ++i) {
         if (pointHasNan(Input->at(i))) {
             continue;
         }
-        Pixel2RowIndex[i] = RowIndex2Pixel.size();
-        RowIndex2Pixel.push_back(i);
+        Pixel2RawIndex[i] = RawIndex2Pixel.size();
+        RawIndex2Pixel.push_back(i);
     }
 }
 
@@ -148,20 +148,20 @@ void SVSBuilder::CalcGradients() {
     Gradients.reset(new NormalCloud);
     Gradients->points.resize(Input->size(), toNormal(nanPoint()));
     GradientNorms.resize(InputNoNan->size());
+    AdjustedGradientNorms.resize(InputNoNan->size());
 
     DecisionFunction df;
     for (int i = 0; i < InputNoNan->size(); ++i) {
-        int const pixel = RowIndex2Pixel.at(i);
+        PointType const& point = InputNoNan->at(i);
+        int const pixel = RawIndex2Pixel.at(i);
         int const y = pixel / Width_;
         int const x = pixel % Width_;
         BuildDF(y, x, &df);
-        auto const grad = df.Gradient(InputNoNan->at(i));
-        Gradients->at(RowIndex2Pixel[i]) = toNormal(grad);
+        auto const grad = df.Gradient(point);
+        Gradients->at(RawIndex2Pixel[i]) = toNormal(grad);
         GradientNorms[i] = grad.getVector3fMap().norm();
+        AdjustedGradientNorms[i] = std::min(10.0f, GradientNorms[i]); // * point.z; // * point.z * point.z;
     }
-
-    MinGradientNorm = *min_element(GradientNorms.begin(), GradientNorms.end());
-    MaxGradientNorm = *max_element(GradientNorms.begin(), GradientNorms.end());
 }
 
 void SVSBuilder::BuildGrid2SV() {

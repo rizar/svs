@@ -71,9 +71,9 @@ public:
 
     PointCloud::ConstPtr Input;
     PointCloud::Ptr InputNoNan;
-    std::vector<float> DistToNN;
-    std::vector<int> RowIndex2Pixel;
-    std::vector<int> Pixel2RowIndex;
+    std::vector<float> DistToNN; // raw indices
+    std::vector<int> RawIndex2Pixel; // raw indices
+    std::vector<int> Pixel2RawIndex; // pixel indices
 };
 
 class SVSBuilder : public BaseBuilder {
@@ -105,9 +105,8 @@ public:
     std::vector<float> Labels;
     std::vector<int> Pixel2TrainNum; // pixel indices
 
-    float MinGradientNorm;
-    float MaxGradientNorm;
     std::vector<float> GradientNorms; // row indices
+    std::vector<float> AdjustedGradientNorms; // row indices
     NormalCloud::Ptr Gradients; // pixel indices
 
     NormalCloud::Ptr Normals; // pixel indices

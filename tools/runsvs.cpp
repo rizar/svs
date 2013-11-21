@@ -60,10 +60,11 @@ private:
 
 // source pathes
     std::string InputPath_;
-    std::string AlphasPath_;
+    std::string AlphaInputPath_;
 
 // dest pathes
     std::string OutputPath_;
+    std::string AlphaOutputPath_;
     std::string FPReportOutputPath_;
     std::string GradientNormsOutputPath_;
     std::string SaveScreenshotPath_;
@@ -87,21 +88,21 @@ void App::ParseArgs(int argc, char* argv []) {
         ("kwidth", po::value<float>(&Params_.KernelWidth))
         ("kthr", po::value<float>(&Params_.KernelThreshold))
         ("teps", po::value<float>(&Params_.TerminateEps))
+        ("smrange", po::value<float>(&Params_.SmoothingRange))
         ("numfp", po::value<int>(&Params_.NumFP))
         ("usegrid", po::value<bool>(&Params_.UseGrid))
         ("usenr", po::value<bool>(&Params_.UseNormals)->zero_tokens())
-        ("alphas", po::value<std::string>(&AlphasPath_))
 
         ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
         ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
         ("showgr", po::value<bool>(&DoShowGradients_)->zero_tokens())
 
-        ("fpreport", po::value<std::string>(&FPReportOutputPath_))
-        ("gnorms", po::value<std::string>(&GradientNormsOutputPath_))
         ("camera", po::value<std::string>(&CameraDescription_))
         ("savesc", po::value<std::string>(&SaveScreenshotPath_))
         ("input", po::value<std::string>(&InputPath_))
         ("output", po::value<std::string>(&OutputPath_))
+        ("usealphas", po::value<std::string>(&AlphaInputPath_))
+        ("savealphas", po::value<std::string>(&AlphaOutputPath_))
         ("libsvm", po::value<std::string>(&LibSVMExportPath_))
         ("alphamap", po::value<std::string>(&AlphaMapPath_));
 
@@ -133,8 +134,8 @@ int App::Run() {
     Builder_.GenerateTrainingSet();
     ExportForLibSVM();
 
-    std::ifstream alphaInput(AlphasPath_.c_str());
-    if (alphaInput.good()) {
+    if (AlphaInputPath_.size()) {
+        std::ifstream alphaInput(AlphaInputPath_.c_str());
         std::vector<SVMFloat> alphas;
         std::copy(std::istream_iterator<SVMFloat>(alphaInput), std::istream_iterator<SVMFloat>(),
                 std::back_inserter(alphas));
@@ -143,13 +144,11 @@ int App::Run() {
     } else {
         Builder_.Learn();
         TrainedModel_ = true;
-
-        if (AlphasPath_.size()) {
-            alphaInput.close();
-            std::ofstream alphaOutput(AlphasPath_.c_str());
-            std::copy(Builder_.SVM().Alphas(), Builder_.SVM().Alphas() + Builder_.Objects->size(),
-                    std::ostream_iterator<SVMFloat>(alphaOutput, "\n"));
-        }
+    }
+    if (AlphaOutputPath_.size()) {
+        std::ofstream alphaOutput(AlphaOutputPath_.c_str());
+        std::copy(Builder_.SVM().Alphas(), Builder_.SVM().Alphas() + Builder_.Objects->size(),
+                std::ostream_iterator<SVMFloat>(alphaOutput, "\n"));
     }
     ExportAlphaMap();
 
@@ -169,10 +168,12 @@ void App::Visualize() {
     if (! DoVisualize_) {
         return;
     }
+
     TUMDataSetVisualizer viewer(CameraDescription_);
     viewer.EasyAdd(Input_, "input", [this] (int i) {
-            return Color(Input_->at(i));
+                return Color(Input_->at(i));
             });
+
     if (DoShowNormals_) {
         Builder_.CalcNormals();
         NormalCloud::ConstPtr normals = Builder_.Normals;
@@ -187,23 +188,51 @@ void App::Visualize() {
         NormalCloud::ConstPtr grads = Builder_.Gradients;
         viewer.addPointCloudNormals<PointType, NormalType>(Input_, grads, 100, 0.002);
     }
+
     viewer.EasyAdd(Input_, "input", [this] (int i) {
                 int const num = Builder_.Pixel2TrainNum[i];
-                if (num == -1) {
-                    return Color();
-                }
                 float const alpha = Builder_.SVM().Alphas()[num];
-                return Color({static_cast<int>(alpha * 255), 0, static_cast<int>((1 - alpha) * 255)});
+                float const relAlpha = alpha / Params_.MaxAlpha;
+                return Color({static_cast<int>(relAlpha * 255), 0, static_cast<int>((1 - relAlpha) * 255)});
             });
-    viewer.EasyAdd(Input_, "input", [this] (int i) {
-                int const num = Builder_.Pixel2RowIndex[i];
-                if (num == -1) {
-                    return Color();
-                }
+
+    float const maxGN = *max_element(Builder_.GradientNorms.begin(), Builder_.GradientNorms.end());
+    viewer.EasyAdd(Input_, "input", [this, maxGN] (int i) {
+                int const num = Builder_.Pixel2RawIndex.at(i);
                 float const gn = Builder_.GradientNorms[num];
-                float const relGN = std::min(1.0f, gn / Builder_.MaxGradientNorm);
+                float const relGN = gn / maxGN;
                 return Color({static_cast<int>(relGN * 255), 0, static_cast<int>((1 - relGN) * 255)});
             });
+
+    float const maxAGN = *max_element(Builder_.AdjustedGradientNorms.begin(), Builder_.AdjustedGradientNorms.end());
+    viewer.EasyAdd(Input_, "input", [this, maxAGN] (int i) {
+                int const num = Builder_.Pixel2RawIndex.at(i);
+                float const agn = Builder_.AdjustedGradientNorms[num];
+                float const relAGN = agn / maxAGN;
+                return Color({static_cast<int>(relAGN * 255), 0, static_cast<int>((1 - relAGN) * 255)});
+            });
+
+    float const maxDTN = quantile(Builder_.DistToNN, 0.97);
+    viewer.EasyAdd(Input_, "input", [this, maxDTN] (int i) {
+                int const num = Builder_.Pixel2RawIndex.at(i);
+                float const dtn = Builder_.DistToNN.at(num);
+                float const relDTN = std::min(1.0f, dtn / maxDTN);
+                return Color({static_cast<int>(relDTN * 255), 0, static_cast<int>((1 - relDTN) * 255)});
+            });
+
+    float const maxZ = max_element(Input_->begin(), Input_->end(),
+            [] (PointType const& lft, PointType const& rgh) {
+                if (pcl_isfinite(lft.z) && pcl_isfinite(rgh.z)) {
+                    return lft.z < rgh.z;
+                } else {
+                    return ! pcl_isfinite(lft.z);
+                }
+            })->z;
+    viewer.EasyAdd(Input_, "input", [this, &maxZ] (int i) {
+                float const relZ = Input_->at(i).z / maxZ;
+                return Color({static_cast<int>(relZ * 255), 0, static_cast<int>((1 - relZ) * 255)});
+            });
+
     viewer.Run(SaveScreenshotPath_);
 }
 
@@ -274,8 +303,6 @@ void App::PrintStatistics() {
     std::cout << "GridStrategy: Number of optimization failures: " << strat.NumOptimizeFailures << std::endl;
     std::cout << "GridStrategy: Average number of neighbors: " <<
         static_cast<float>(strat.TotalNeighborsProcessed) / strat.NumNeighborsCalculations << std::endl;
-    std::cout << "SVSBuilder: Minimum gradient norm " << Builder_.MinGradientNorm << std::endl;
-    std::cout << "SVSBuilder: Maximum gradient norm " << Builder_.MaxGradientNorm << std::endl;
 }
 
 int main(int argc, char* argv []) {
