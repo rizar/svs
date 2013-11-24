@@ -60,13 +60,3 @@ inline float quantile(std::vector<float> const& xs, float q) {
     std::sort(copy.begin(), copy.end());
     return copy[static_cast<size_t>(copy.size() * q)];
 }
-
-template <class E>
-void debugPrint(std::vector<E> const& vec, std::ostream & ostr) {
-    ostr << "[" << vec[0];
-    for (int i = 1; i < vec.size(); ++i) {
-        ostr << ", " << vec[i];
-    }
-    ostr << "]" << std::endl;
-}
-

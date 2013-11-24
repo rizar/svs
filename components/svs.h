@@ -1,6 +1,7 @@
 #include "common.h"
 #include "gridstrategy.h"
 #include "df.h"
+#include "svsparams.h"
 
 #include "pcl/search/kdtree.h"
 
@@ -29,27 +30,6 @@ public:
 
 private:
     PointCloud::Ptr FeaturePoints_;
-};
-
-struct SVSParams {
-    int Seed = 1;
-
-    float MaxAlpha = 32;
-    float KernelWidth = 5;
-    float KernelThreshold = 1e-3;
-    float TerminateEps = 1e-2;
-
-    float SmoothingRange = 5;
-    int BorderWidth = 1;
-    float StepWidth = 1;
-    float TakeProb = 1.0;
-
-    int NumFP = 100;
-
-    size_t CacheSize = 1 << 30;
-
-    bool UseGrid = true;
-    bool UseNormals = true;
 };
 
 class BaseBuilder {
@@ -92,6 +72,8 @@ public:
         return SVM_;
     }
 
+    void ToImageLayout(std::vector<float> const& data, std::vector<float> * res);
+
 private:
     void BuildDF(int y, int x, DecisionFunction * df);
     void BuildGrid2SV();
@@ -106,6 +88,7 @@ public:
     std::vector<int> Pixel2TrainNum; // pixel indices
 
     std::vector<float> GradientNorms; // row indices
+    std::vector<float> NumCloseSV; // row indices
     std::vector<float> AdjustedGradientNorms; // row indices
     NormalCloud::Ptr Gradients; // pixel indices
 

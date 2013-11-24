@@ -58,6 +58,7 @@ void Solution::Init(int n, SVMFloat C, float const* labels) {
     N_ = n;
     Alphas.resize(N_);
     Grad.resize(N_, -1);
+    Touched.resize(N_);
 
     Status.resize(N_);
     for (int i = 0; i < N_; ++i) {
@@ -178,6 +179,10 @@ void SVM3D::Train(PointCloud const& points, std::vector<float> const& labels) {
     CalcRho();
     CalcSVCount();
     CalcTargetFunction();
+
+    for (int i = 0; i < N_; ++i) {
+        TouchedCount += Sol_.Touched[i];
+    }
 }
 
 bool SVM3D::Iterate() {
@@ -191,6 +196,8 @@ bool SVM3D::Iterate() {
     int i = Sol_.LowerOutlier();
     int j = Sol_.UpperOutlier();
     Strategy_->OptimizePivots(&i, &j);
+    Sol_.Touched[i] = 1;
+    Sol_.Touched[j] = 1;
 
     float const Qii = 1;
     float const Qjj = 1;

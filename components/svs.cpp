@@ -147,6 +147,7 @@ void SVSBuilder::CalcGradients() {
 
     Gradients.reset(new NormalCloud);
     Gradients->points.resize(Input->size(), toNormal(nanPoint()));
+    NumCloseSV.resize(InputNoNan->size());
     GradientNorms.resize(InputNoNan->size());
     AdjustedGradientNorms.resize(InputNoNan->size());
 
@@ -159,8 +160,9 @@ void SVSBuilder::CalcGradients() {
         BuildDF(y, x, &df);
         auto const grad = df.Gradient(point);
         Gradients->at(RawIndex2Pixel[i]) = toNormal(grad);
+        NumCloseSV[i] = df.SVCount();
         GradientNorms[i] = grad.getVector3fMap().norm();
-        AdjustedGradientNorms[i] = std::min(10.0f, GradientNorms[i]); // * point.z; // * point.z * point.z;
+        AdjustedGradientNorms[i] = NumCloseSV[i] ? GradientNorms[i] / NumCloseSV[i] : 0;
     }
 }
 
@@ -183,4 +185,11 @@ void SVSBuilder::BuildDF(int y, int x, DecisionFunction * df) {
                     df->AddSupportVector(sv, SVM().Alphas()[idx]);
                 }
             });
+}
+
+void SVSBuilder::ToImageLayout(std::vector<float> const& data, std::vector<float> * res) {
+    res->resize(Input->size(), -1);
+    for (int i = 0; i < data.size(); ++i) {
+        res->at(RawIndex2Pixel[i]) = data[i];
+    }
 }

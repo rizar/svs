@@ -70,3 +70,12 @@ PointType DecisionFunction::SquaredGradientNormGradient(PointType const& point) 
 
     return createPoint<PointType>(result(0), result(1), result(2));
 }
+
+float DecisionFunction::KernelValueWithAlpha(int svIndex, PointType const& point) const {
+    float const dist2 = pcl::squaredEuclideanDistance(SV_[svIndex], point);
+    return Alpha_[svIndex] * exp(-Gamma_ * dist2);
+}
+
+int DecisionFunction::SVCount() const {
+    return SV_.size();
+}

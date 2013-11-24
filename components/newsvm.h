@@ -52,11 +52,11 @@ public:
 
     void DebugPrint(std::ostream & ostr);
 
-
 public:
     std::vector<SVMFloat> Alphas;
     std::vector<SVMFloat> Grad;
     std::vector<int> Status;
+    std::vector<int> Touched;
 
 public:
     int N_;
@@ -188,6 +188,7 @@ private:
 public:
     int Iteration = 0;
     int SVCount = 0;
+    int TouchedCount = 0;
     float TargetFunction = 0.0;
     float Rho = 0.0;
 
