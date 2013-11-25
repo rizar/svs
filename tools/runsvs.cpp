@@ -41,13 +41,22 @@ private:
     void Visualize();
 
 private:
+    void VisOriginal(TUMDataSetVisualizer * viewer);
+    void VisGradientNorms(TUMDataSetVisualizer * viewer);
+    void VisAdjustedGradientNorms(TUMDataSetVisualizer * viewer);
+    void VisZ(TUMDataSetVisualizer * viewer);
+    void VisSVDensity(TUMDataSetVisualizer * viewer);
+    void VisAlpha(TUMDataSetVisualizer * viewer);
+    void VisDistToNN(TUMDataSetVisualizer * viewer);
+
+private:
     PointCloud::Ptr Input_;
 
     SVSParams Params_;
     SVSBuilder Builder_;
 
 // visualization flags
-    bool DoVisualize_ = false;
+    bool DoVisualize_ = true;
     bool DoShowNormals_ = false;
     bool DoShowGradients_ = false;
 
@@ -95,7 +104,7 @@ void App::ParseArgs(int argc, char* argv []) {
         ("usegrid", po::value<bool>(&Params_.UseGrid))
         ("usenr", po::value<bool>(&Params_.UseNormals)->zero_tokens())
 
-        ("dovis", po::value<bool>(&DoVisualize_)->zero_tokens())
+        ("dovis", po::value<bool>(&DoVisualize_))
         ("shownr", po::value<bool>(&DoShowNormals_)->zero_tokens())
         ("showgr", po::value<bool>(&DoShowGradients_)->zero_tokens())
 
@@ -181,9 +190,14 @@ void App::Visualize() {
     }
 
     TUMDataSetVisualizer viewer(CameraDescription_);
-    viewer.EasyAdd(Input_, "input", [this] (int i) { // #1
-                return Color(Input_->at(i));
-            });
+
+    VisAdjustedGradientNorms(&viewer);
+    VisGradientNorms(&viewer);
+    VisAlpha(&viewer);
+    VisOriginal(&viewer);
+    VisSVDensity(&viewer);
+    VisZ(&viewer);
+    VisDistToNN(&viewer);
 
     if (DoShowNormals_) {
         Builder_.CalcNormals();
@@ -200,39 +214,38 @@ void App::Visualize() {
         viewer.addPointCloudNormals<PointType, NormalType>(Input_, grads, 100, 0.002);
     }
 
-    viewer.EasyAdd(Input_, "input", [this] (int i) { // #2
-                int const num = Builder_.Pixel2TrainNum[i];
-                float const alpha = Builder_.SVM().Alphas()[num];
-                float const relAlpha = alpha / Params_.MaxAlpha;
-                return Color({static_cast<int>(relAlpha * 255), 0, static_cast<int>((1 - relAlpha) * 255)});
-            });
+    viewer.Run(SaveScreenshotPath_);
+}
 
+void App::VisOriginal(TUMDataSetVisualizer * viewer) {
+    viewer->EasyAdd(Input_, "input", [this] (int i) {
+                return Color(Input_->at(i));
+            });
+}
+
+void App::VisGradientNorms(TUMDataSetVisualizer * viewer) {
     float const maxGN = *max_element(Builder_.GradientNorms.begin(), Builder_.GradientNorms.end());
-    viewer.EasyAdd(Input_, "input", [this, maxGN] (int i) { // #3
+    viewer->EasyAdd(Input_, "input", [this, maxGN] (int i) { // #3
                 int const num = Builder_.Pixel2RawIndex.at(i);
                 float const gn = Builder_.GradientNorms[num];
                 float const relGN = gn / maxGN;
                 return Color({static_cast<int>(relGN * 255), 0, static_cast<int>((1 - relGN) * 255)});
             });
+}
 
+void App::VisAdjustedGradientNorms(TUMDataSetVisualizer * viewer) {
     float const maxAGN = *max_element(
             Builder_.AdjustedGradientNorms.begin(),
             Builder_.AdjustedGradientNorms.end());
-    viewer.EasyAdd(Input_, "input", [this, maxAGN] (int i) { // #4
+    viewer->EasyAdd(Input_, "input", [this, maxAGN] (int i) {
                 int const num = Builder_.Pixel2RawIndex.at(i);
                 float const agn = Builder_.AdjustedGradientNorms[num];
                 float const relAGN = agn / maxAGN;
                 return Color({static_cast<int>(relAGN * 255), 0, static_cast<int>((1 - relAGN) * 255)});
             });
+}
 
-    float const maxDTN = quantile(Builder_.DistToNN, 0.97);
-    viewer.EasyAdd(Input_, "input", [this, maxDTN] (int i) { // #5
-                int const num = Builder_.Pixel2RawIndex.at(i);
-                float const dtn = Builder_.DistToNN.at(num);
-                float const relDTN = std::min(1.0f, dtn / maxDTN);
-                return Color({static_cast<int>(relDTN * 255), 0, static_cast<int>((1 - relDTN) * 255)});
-            });
-
+void App::VisZ(TUMDataSetVisualizer * viewer) {
     float const maxZ = max_element(Input_->begin(), Input_->end(),
             [] (PointType const& lft, PointType const& rgh) {
                 if (pcl_isfinite(lft.z) && pcl_isfinite(rgh.z)) {
@@ -241,19 +254,38 @@ void App::Visualize() {
                     return ! pcl_isfinite(lft.z);
                 }
             })->z;
-    viewer.EasyAdd(Input_, "input", [this, &maxZ] (int i) { // #6
+    viewer->EasyAdd(Input_, "input", [this, &maxZ] (int i) { // #6
                 float const relZ = Input_->at(i).z / maxZ;
                 return Color({static_cast<int>(relZ * 255), 0, static_cast<int>((1 - relZ) * 255)});
             });
+}
 
+void App::VisSVDensity(TUMDataSetVisualizer * viewer) {
     float const maxSVCount = *max_element(Builder_.NumCloseSV.begin(), Builder_.NumCloseSV.end());
-    viewer.EasyAdd(Input_, "input", [this, &maxSVCount] (int i) { // #7
+    viewer->EasyAdd(Input_, "input", [this, &maxSVCount] (int i) { // #7
                 int const num = Builder_.Pixel2RawIndex.at(i);
                 float const relSVCount = Builder_.NumCloseSV[num] / static_cast<float>(maxSVCount);
                 return Color({static_cast<int>(relSVCount * 255), 0, static_cast<int>((1 - relSVCount) * 255)});
             });
+}
 
-    viewer.Run(SaveScreenshotPath_);
+void App::VisAlpha(TUMDataSetVisualizer * viewer) {
+    viewer->EasyAdd(Input_, "input", [this] (int i) {
+                int const num = Builder_.Pixel2TrainNum[i];
+                float const alpha = Builder_.SVM().Alphas()[num];
+                float const relAlpha = alpha / Params_.MaxAlpha;
+                return Color({static_cast<int>(relAlpha * 255), 0, static_cast<int>((1 - relAlpha) * 255)});
+            });
+}
+
+void App::VisDistToNN(TUMDataSetVisualizer * viewer) {
+    float const maxDTN = quantile(Builder_.DistToNN, 0.97);
+    viewer->EasyAdd(Input_, "input", [this, maxDTN] (int i) { // #5
+                int const num = Builder_.Pixel2RawIndex.at(i);
+                float const dtn = Builder_.DistToNN.at(num);
+                float const relDTN = std::min(1.0f, dtn / maxDTN);
+                return Color({static_cast<int>(relDTN * 255), 0, static_cast<int>((1 - relDTN) * 255)});
+            });
 }
 
 // ALL KINDS OF OUTPUT
@@ -275,7 +307,7 @@ void App::ExportAlphaMap() {
     }
 
     // works only for non-randomly generated training set
-    cv::Mat image(Input_->height, Input_->width, CV_8UC3);
+    /*cv::Mat image(Input_->height, Input_->width, CV_8UC3);
     for (int i = 0; i < Input_->height; ++i) {
         for (int j = 0; j < Input_->width; ++j) {
             int num = Builder_.Pixel2TrainNum[i * Input_->width + j];
@@ -289,7 +321,7 @@ void App::ExportAlphaMap() {
         }
     }
 
-    imwrite(AlphaMapPath_, image);
+    imwrite(AlphaMapPath_, image);*/
 }
 
 void App::PrintParameters() {

@@ -193,3 +193,6 @@ void SVSBuilder::ToImageLayout(std::vector<float> const& data, std::vector<float
         res->at(RawIndex2Pixel[i]) = data[i];
     }
 }
+
+void SVSBuilder::FeaturePointSearch() {
+}

@@ -62,8 +62,11 @@ public:
 
     void SetInputCloud(PointCloud::ConstPtr input);
     void GenerateTrainingSet();
+
     void Learn();
     void InitSVM(std::vector<SVMFloat> const& alphas);
+
+    void FeaturePointSearch();
 
     void CalcGradients();
     void CalcNormals();
@@ -93,6 +96,8 @@ public:
     NormalCloud::Ptr Gradients; // pixel indices
 
     NormalCloud::Ptr Normals; // pixel indices
+
+    PointCloud::Ptr FeaturePoints;
 
     std::shared_ptr<GridNeighbourModificationStrategy> Strategy;
 
